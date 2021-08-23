@@ -76,24 +76,24 @@ class History():
         for line in info['data']:
             if line[0] == "upgrade":
                 if "upgraded" not in output.keys():
-                    output['upgraded'] = []
-                output['upgraded'].append(str("Package: " + line[1].split(':')[0] + " from: " + " to: ".join([line[2], line[3]])))
-            if line[0] == "configure":
-                if "configured" not in output.keys():
-                    output['configured'] = []
-                output['configured'].append(line[1].split(':')[0])
+                    output['upgraded'] = [["Package Name", "Old Version", "New Version"]]
+                output['upgraded'].append(line[1:4])
             if line[0] == "remove":
                 if "removed" not in output.keys():
-                    output['removed'] = []
-                output['removed'].append(line[1].split(':')[0])
+                    output['removed'] = [["Package Name", "Version"]]
+                output['removed'].append(line[1:3])
             if line[0] == "configure":
                 if "configured" not in output.keys():
                     output['configured'] = []
-                output['configured'].append(line[1].split(':')[0])
+                output['configured'].append(line[1])
+            if line[0] == "install":
+                if "installed" not in output.keys():
+                    output['installed'] = [["Package Name", "Version"]]
+                output['installed'].append([line[1], line[3]])
             if line[0] == "status":
                 if "status" not in output.keys():
                     output['status'] = []
-                output['status'].append(line[2].split(':')[0] + " version: " + line[3] + " is " + line[1])
+                output['status'].append([line[2], line[3], line[1]])
         output['raw'] = info
         return(output)
 
@@ -114,7 +114,18 @@ def main():
         output = history.parseJobReport(args.info)
         del output['raw']
         del output['status']
-        print(yaml.dump(output, default_flow_style=False))
+        print("Job ID: " + output['Job Id'])
+        print("Date and Time: " + output['Date'])
+        del output['Date']
+        del output['Job Id']
+
+        for key in output.keys():
+            print("\n"+key.capitalize()+":\n")
+            if key != "configured":
+                history._print_table(output[key])
+            elif key == "configured":
+               [[ print("  - " + line) for line in output[key] ]] 
+        #print(yaml.dump(output, default_flow_style=False))
     if args.inspect:
         output = history.parseJobReport(args.inspect)
         PP.pprint(output['raw'])
