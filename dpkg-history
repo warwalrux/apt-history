@@ -12,7 +12,7 @@ import yaml
 
 DPKG_LOGFILE = "/var/log/dpkg.log"
 # Removed: startup, status
-ACTIONS = ["install", "remove", "upgrade" ]
+ACTIONS = ["install", "remove", "upgrade", "configure" ]
 STATUSES = [ "not-installed", "config-files", "half-installed", "unpacked", "half-configured", "triggers-awaited", "triggers-pending", "installed" ]
 tableformat="fancy-grid"
 PP = pprint.PrettyPrinter(indent=4)
@@ -67,7 +67,7 @@ class History():
             output.append(t)
         self._print_table(output)
 
-    def showJob(self, job_id):
+    def parseJobReport(self, job_id):
         info = self.jobs[int(job_id)]
         packages = []
         output = {}
@@ -86,21 +86,37 @@ class History():
                 if "removed" not in output.keys():
                     output['removed'] = []
                 output['removed'].append(line[1].split(':')[0])
-        print(yaml.dump(output, default_flow_style=False))
-
+            if line[0] == "configure":
+                if "configured" not in output.keys():
+                    output['configured'] = []
+                output['configured'].append(line[1].split(':')[0])
+            if line[0] == "status":
+                if "status" not in output.keys():
+                    output['status'] = []
+                output['status'].append(line[2].split(':')[0] + " version: " + line[3] + " is " + line[1])
+        output['raw'] = info
+        return(output)
 
 def main():
     history = History()
     parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--debug', action="store_true", help="debug switch")
+    parser.add_argument('--debug', action="store_true", help="debug switch")
     action = parser.add_mutually_exclusive_group()
-    action.add_argument('-s', '--show', action="store_true", help="Show dpkg jobs")
-    action.add_argument('-i', '--info', help="Show detailed information by Job ID")
+    action.add_argument('--list', action="store_true", help="Show dpkg transactions")
+    action.add_argument('--info', help="Show transaction report by ID")
+    action.add_argument('--inspect', help="Show detailed transaction data")
+    action.add_argument('--redo', help="Redo transaction by ID")
+    action.add_argument('--undo', help="Undo transaction by ID")
     args = parser.parse_args()
-    if args.show:
+    if args.list:
         history.printJobs()
     if args.info:
-       history.showJob(args.info) 
-
+        output = history.parseJobReport(args.info)
+        del output['raw']
+        del output['status']
+        print(yaml.dump(output, default_flow_style=False))
+    if args.inspect:
+        output = history.parseJobReport(args.inspect)
+        PP.pprint(output['raw'])
 if __name__ == "__main__":
     main()
