@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 
 import argparse
 import json
@@ -73,6 +73,8 @@ class History():
         output = {}
         output['Job Id'] = job_id
         output['Date'] = info['date'] + " " + info['time']
+        output['Status'] = [["Package Name", "Version", "Status"]]
+        statuses = {}
         for line in info['data']:
             if line[0] == "upgrade":
                 if "upgraded" not in output.keys():
@@ -91,9 +93,10 @@ class History():
                     output['installed'] = [["Package Name", "Version"]]
                 output['installed'].append([line[1], line[3]])
             if line[0] == "status":
-                if "status" not in output.keys():
-                    output['status'] = []
-                output['status'].append([line[2], line[3], line[1]])
+                statuses[line[2].split(':')[0]] = {}
+                statuses[line[2].split(':')[0]]['Version'] = line[3]
+                statuses[line[2].split(':')[0]]['Status'] = line[1]
+        [[ output['Status'].append([key, statuses[key]['Version'], statuses[key]['Status']]) for key in statuses ]]
         output['raw'] = info
         return(output)
 
@@ -113,7 +116,7 @@ def main():
     if args.info:
         output = history.parseJobReport(args.info)
         del output['raw']
-        del output['status']
+        #del output['status']
         print("Job ID: " + output['Job Id'])
         print("Date and Time: " + output['Date'])
         del output['Date']
@@ -126,8 +129,10 @@ def main():
             elif key == "configured":
                [[ print("  - " + line) for line in output[key] ]] 
         #print(yaml.dump(output, default_flow_style=False))
+
     if args.inspect:
         output = history.parseJobReport(args.inspect)
         PP.pprint(output['raw'])
+
 if __name__ == "__main__":
     main()
