@@ -7,13 +7,15 @@ import pprint
 import re
 import sys
 import tabulate
+import pprint
+import yaml
 
 DPKG_LOGFILE = "/var/log/dpkg.log"
 # Removed: startup, status
 ACTIONS = ["install", "remove", "upgrade" ]
 STATUSES = [ "not-installed", "config-files", "half-installed", "unpacked", "half-configured", "triggers-awaited", "triggers-pending", "installed" ]
 tableformat="fancy-grid"
-
+PP = pprint.PrettyPrinter(indent=4)
 
 class History():
     def __init__(self):
@@ -51,7 +53,7 @@ class History():
 
 
     def printJobs(self):
-        output = [[ "Job ID", "Date", "Action", "Affected" ]]
+        output = [[ "Job ID", "Date", "Action", "Packages Affected" ]]
         for job in self.jobs:
             affected = []
             t = [ job, self.jobs[job]['date'], []]
@@ -60,16 +62,32 @@ class History():
                     t[2].append(line[0])
                     if line[1] not in affected:
                         affected.append(line[1])
-            print(affected)
             t.append(len(affected))
+            t[2] = ", ".join(t[2])
             output.append(t)
         self._print_table(output)
 
     def showJob(self, job_id):
         info = self.jobs[int(job_id)]
         packages = []
-        [[ packages.append(line[1]) if line[1] not in packages and line[0] in ACTIONS else "" for line in info['data'] ]]
-        [[ print(line) for line in packages ]]
+        output = {}
+        output['Job Id'] = job_id
+        output['Date'] = info['date'] + " " + info['time']
+        for line in info['data']:
+            if line[0] == "upgrade":
+                if "upgraded" not in output.keys():
+                    output['upgraded'] = []
+                output['upgraded'].append(str(line[1].split(':')[0] + " from " + " -> ".join([line[2], line[3]])))
+            if line[0] == "configure":
+                if "configured" not in output.keys():
+                    output['configured'] = []
+                output['configured'].append(line[1].split(':')[0])
+            if line[0] == "remove":
+                if "removed" not in output.keys():
+                    output['removed'] = []
+                output['removed'].append(line[1].split(':')[0])
+        print(yaml.dump(output, default_flow_style=False))
+
 
 def main():
     history = History()
