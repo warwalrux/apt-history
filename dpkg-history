@@ -14,7 +14,6 @@ import yaml
 tableformat="github"
 
 DPKG_LOGFILE = "/var/log/dpkg.log"
-# Removed: startup, status
 ACTIONS = ["install", "remove", "upgrade", "configure" ]
 STATUSES = [ "not-installed", "config-files", "half-installed", "unpacked", "half-configured", "triggers-awaited", "triggers-pending", "installed" ]
 PP = pprint.PrettyPrinter(indent=4)
@@ -75,6 +74,8 @@ class History():
         output = {}
         output['Job Id'] = job_id
         output['Date'] = info['date'] + " " + info['time']
+
+        # Added headers for output table
         output['Status'] = [["Package Name", "Version", "Status"]]
         statuses = {}
         for line in info['data']:
@@ -99,6 +100,8 @@ class History():
                 statuses[line[2].split(':')[0]]['Version'] = line[3]
                 statuses[line[2].split(':')[0]]['Status'] = line[1]
         [[ output['Status'].append([key, statuses[key]['Version'], statuses[key]['Status']]) for key in statuses ]]
+
+        # For inspection
         output['raw'] = info
         return(output)
 
@@ -134,8 +137,9 @@ def main():
 
     if args.inspect:
         output = history.parseJobReport(args.inspect)
-        print("Job ID: " + output['Job ID'])
+        print("Job ID: " + output['Job Id'])
         print("Date: " + output['Date'])
-        [[ print(item) for item in output['raw'] ]]
+        [[ print(output['Date'], line) for line in output['raw']['data'] ]]
+
 if __name__ == "__main__":
     main()
