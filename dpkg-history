@@ -5,6 +5,7 @@ import json
 import os
 import pprint
 import re
+import shutil
 import sys
 import tabulate
 import pprint
@@ -18,8 +19,39 @@ ACTIONS = ["install", "remove", "upgrade", "configure" ]
 STATUSES = [ "not-installed", "config-files", "half-installed", "unpacked", "half-configured", "triggers-awaited", "triggers-pending", "installed" ]
 PP = pprint.PrettyPrinter(indent=4)
 
+class dpkgHandler():
+    def __init__(self):
+        self.command = shutil.which('dpkg')
+
+    def run(self, data):
+        # boilerplate logic to fold a dict into a list of bash appropriate arguments to supply to self.command.
+        run_args_list = [ ['--' + key, conf[key]] for key in conf.keys() if key not in self.unacceptable_tags and conf[key] is not None and conf[key] is not True and conf[key] is not False ]
+        run_args_flags = [ ['--' + key, conf[key]] for key in conf.keys() if key not in self.unacceptable_tags and conf[key] is True ]
+        self.run_args = [ arg for args_pair in run_args_list for arg in args_pair ]
+        self.run_flags = [ arg[0] for arg in run_args_flags ]
+
+        # construct the command string
+        runcmd = [self.command]
+        runcmd.extend(self.run_args)
+        runcmd.extend(self.run_flags)
+
+        # optionally if a precmd command is specified as a list we can run it and pipe the output to dpkg! neat!!!
+        if "precmd" in conf.keys() and conf['precmd'] is not None:
+            p = subprocess.Popen(conf['precmd'], stdout=subprocess.PIPE)
+            s = subprocess.Popen(runcmd, stdin=p.stdout, stdout=subprocess.PIPE)
+            print(s.communicate()[0].decode('utf8'))
+
+        # otherwise just run the damned code.
+        else:
+            s = subprocess.Popen(runcmd, stdout=subprocess.PIPE)
+            print(s.communicate()[0].decode('utf8'))
+
 class History():
     def __init__(self):
+        # Get yourself a dpkg handler, it's required for the undo / redo functionality later.
+        self.runner = dpkgHandler()
+
+        # Build a jobs object
         self.jobs = {}
         job_id = 1
         if os.path.isfile(DPKG_LOGFILE):
@@ -46,8 +78,9 @@ class History():
                 self.jobs[job_id]['data'] = []
                 [[ self.jobs[job_id]['data'].append(line) for line in history[date][time] ]]
                 job_id += 1
-        
+    
     def _print_table(self, table):
+        # Use tabulate to fancy format output
         headers = table[0]
         table.pop(0)
         print(tabulate.tabulate(table, headers, tablefmt=tableformat))
@@ -68,6 +101,7 @@ class History():
             output.append(t)
         self._print_table(output)
 
+
     def parseJobReport(self, job_id):
         info = self.jobs[int(job_id)]
         packages = []
@@ -78,6 +112,8 @@ class History():
         # Added headers for output table
         output['Status'] = [["Package Name", "Version", "Status"]]
         statuses = {}
+
+        # Parse job from records
         for line in info['data']:
             if line[0] == "upgrade":
                 if "upgraded" not in output.keys():
@@ -101,7 +137,7 @@ class History():
                 statuses[line[2].split(':')[0]]['Status'] = line[1]
         [[ output['Status'].append([key, statuses[key]['Version'], statuses[key]['Status']]) for key in statuses ]]
 
-        # For inspection
+        # Include the raw object for inspection.
         output['raw'] = info
         return(output)
 
