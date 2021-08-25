@@ -6,27 +6,38 @@ import os
 import pprint
 import re
 import shutil
+import subprocess
 import sys
 import tabulate
 import pprint
 import yaml
 
 
-tableformat="github"
-
+TABLEFORMAT = "github"
 DPKG_LOGFILE = "/var/log/dpkg.log"
 ACTIONS = ['install', 'remove', 'upgrade', 'configure' ]
 STYLED_ACTIONS = ['installed', 'removed', 'upgraded', 'configured' ]
 OPPOSITES = { 'installed': 'remove', 'removed': 'install', 'upgraded': 'revert' }
+STYLED_OPPOSITES = ['removed', 'installed', 'reverted'] 
 STATUSES = [ "not-installed", "config-files", "half-installed", "unpacked", "half-configured", "triggers-awaited", "triggers-pending", "installed" ]
 PP = pprint.PrettyPrinter(indent=4)
 
-class dpkgHandler():
+class pkgHandler():
     def __init__(self):
         self.commands = {
             'dpkg': shutil.which('dpkg'),
             'reconfigure': shutil.which('dpkg-reconfigure'),
+            'apt': shutil.which('apt'),
         }
+
+    def apt(self, args):
+        # construct the command string
+        # literally takes a list of arguments that are to be fed to apt.
+        # _way_ less cool, but apt is currently not `-/--` argument based.
+        runcmd = [self.commands['apt']]
+        runcmd.extend(args)
+        s = subprocess.Popen(runcmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        print(s.communicate()[0].decode('utf8'))
 
     def run(self, data):
         # boilerplate logic to fold a dict into a list of bash appropriate arguments to supply to self.command.
@@ -36,7 +47,7 @@ class dpkgHandler():
         self.run_flags = [ arg[0] for arg in run_args_flags ]
 
         # construct the command string
-        runcmd = [self.command['dpkg']]
+        runcmd = [self.commands['dpkg']]
         runcmd.extend(self.run_args)
         runcmd.extend(self.run_flags)
 
@@ -59,7 +70,7 @@ class dpkgHandler():
         self.run_flags = [ arg[0] for arg in run_args_flags ]
 
         # construct the command string
-        runcmd = [self.command['reconfigure']]
+        runcmd = [self.commands['reconfigure']]
         runcmd.extend(self.run_args)
         runcmd.extend(self.run_flags)
 
@@ -77,7 +88,7 @@ class dpkgHandler():
 class History():
     def __init__(self):
         # Get yourself a dpkg handler, it's required for the undo / redo functionality later.
-        self.DPKG = dpkgHandler()
+        self.PackageManager = pkgHandler()
 
         # Build a jobs object
         self.jobs = {}
@@ -111,21 +122,30 @@ class History():
         # Use tabulate to fancy format output
         headers = table[0]
         table.pop(0)
-        print(tabulate.tabulate(table, headers, tablefmt=tableformat))
+        print(tabulate.tabulate(table, headers, tablefmt=TABLEFORMAT))
 
 
     def undoTransaction(self, data):
         for key in data.keys():
             if key in OPPOSITES.keys():
-                # pop headers
+                # Remove table headers
                 data[key].pop(0)
-                
-                print(key)
-                [[ print(item) for item in data[key] ]]
-
+                if key == "installed":
+                    [[ print(item[0] + " Version: " + item[1] + " is to be removed.") for item in data[key] ]]
+                if key == "upgraded":
+                    [[ print(item[0] + "version: " + item[2] + " will be replaced with: " + item[1]) for item in data[key] ]]
+                if key == "removed":
+                    [[ print(item[0] + " will be installed") for item in data[key] ]]
 
     def redoTransaction(self, data):
-        PP.pprint(data)
+        for key in data.keys():
+            data[key].pop(0)
+            if key == "installed":
+                [[ print(item[0] + " Version: " + item[1] + " is to be removed.") for item in data[key] ]]
+            if key == "upgraded":
+                [[ print(item[0] + "version: " + item[2] + " will be replaced with: " + item[1]) for item in data[key] ]]
+            if key == "removed":
+                [[ print(item[0] + " will be installed") for item in data[key] ]]
 
 
     def printJobs(self):
