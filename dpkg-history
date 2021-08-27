@@ -1,17 +1,12 @@
 #!/usr/bin/python3
 
 import argparse
-import json
 import os
 import pprint
-import re
-import shutil
 import subprocess
 import sys
 import tabulate
 import pprint
-import yaml
-
 
 TABLEFORMAT = "github"
 DPKG_LOGFILE = "/var/log/dpkg.log"
@@ -20,27 +15,80 @@ ACTIONS = ["install", "remove", "upgrade", "configure"]
 STYLED_ACTIONS = ["installed", "removed", "upgraded", "configured"]
 OPPOSITES = {"installed": "remove", "removed": "install", "upgraded": "revert"}
 STYLED_OPPOSITES = ["removed", "installed", "reverted"]
-STATUSES = [
-    "not-installed",
-    "config-files",
-    "half-installed",
-    "unpacked",
-    "half-configured",
-    "triggers-awaited",
-    "triggers-pending",
-    "installed",
-]
 PP = pprint.PrettyPrinter(indent=4)
 
 
-class pkgHandler:
+class History:
     def __init__(self):
-        self.commands = {
-            "dpkg": shutil.which("dpkg"),
-            "reconfigure": shutil.which("dpkg-reconfigure"),
-        }
-        if PACKAGE_HANDLER == "apt":
-            self.commands["apt"] = shutil.which("apt")
+        # Build a jobs object
+        self.jobs = {}
+        statuses = {}
+        job_id = 1
+        if os.path.isfile(DPKG_LOGFILE):
+            history = {}
+            with open(DPKG_LOGFILE, "rb") as f:
+                data = f.readlines()
+            f.close()
+        else:
+            print("%s Not Found!" % (DPKG_LOGFILE))
+
+        for record in data:
+            record = record.decode("utf8").rstrip().split()
+
+            # Ignore the seconds field in the time string
+            record[1] = ":".join([record[1].split(":")[0], record[1].split(":")[1]])
+
+            if job_id not in self.jobs.keys():
+                self.jobs[job_id] = {}
+                self.jobs[job_id]["date"] = record[0]
+                self.jobs[job_id]["time"] = record[1]
+                self.jobs[job_id]["raw"] = []
+                self.jobs[job_id]["data"] = {}
+
+            elif (
+                self.jobs[job_id]["date"] != record[0]
+                and self.jobs[job_id]["time"] != record[1]
+            ):
+                self._stuffStatuses(job_id, statuses)
+                job_id += 1
+                self.jobs[job_id] = {}
+                self.jobs[job_id]["date"] = record[0]
+                self.jobs[job_id]["time"] = record[1]
+                self.jobs[job_id]["raw"] = []
+                self.jobs[job_id]["data"] = {}
+
+            # Parse the line without the date and time fields
+            line = record[2:]
+            self.jobs[job_id]["raw"].append(line)
+            if line[0] == "upgrade":
+                if "upgraded" not in self.jobs[job_id]["data"].keys():
+                    self.jobs[job_id]["data"]["upgraded"] = [
+                        ["Package Name", "Old Version", "New Version"]
+                    ]
+                self.jobs[job_id]["data"]["upgraded"].append(line[1:4])
+            if line[0] == "remove":
+                if "removed" not in self.jobs[job_id]["data"].keys():
+                    self.jobs[job_id]["data"]["removed"] = [["Package Name", "Version"]]
+                self.jobs[job_id]["data"]["removed"].append(line[1:3])
+            if line[0] == "configure":
+                if "configured" not in self.jobs[job_id]["data"].keys():
+                    self.jobs[job_id]["data"]["configured"] = []
+                self.jobs[job_id]["data"]["configured"].append(line[1])
+            if line[0] == "install":
+                if "installed" not in self.jobs[job_id]["data"].keys():
+                    self.jobs[job_id]["data"]["installed"] = [
+                        ["Package Name", "Version"]
+                    ]
+                self.jobs[job_id]["data"]["installed"].append([line[1], line[3]])
+            if line[0] == "status":
+                if "status" not in self.jobs[job_id]["data"].keys():
+                    self.jobs[job_id]["data"]["status"] = [
+                        ["Package Name", "Version", "Status"]
+                    ]
+                if line[2].split(":")[0] not in statuses.keys():
+                    statuses[line[2].split(":")[0]] = {}
+                    statuses[line[2].split(":")[0]]["version"] = line[3]
+                statuses[line[2].split(":")[0]]["status"] = line[1]
 
     def apt(self, args):
         if PACKAGE_HANDLER == "apt":
@@ -122,48 +170,18 @@ class pkgHandler:
             s = subprocess.Popen(runcmd, stdout=subprocess.PIPE)
             print(s.communicate()[0].decode("utf8"))
 
+    def _dumper(self):
+        PP.pprint(self.jobs)
 
-class History:
-    def __init__(self):
-        # Get yourself a dpkg handler, it's required for the undo / redo functionality later.
-        self.PackageManager = pkgHandler()
-
-        # Build a jobs object
-        self.jobs = {}
-        job_id = 1
-        if os.path.isfile(DPKG_LOGFILE):
-            history = {}
-            with open(DPKG_LOGFILE, "rb") as f:
-                data = f.readlines()
-            f.close()
-            for record in data:
-                record = record.decode("utf8").rstrip().split()
-
-                # Ignore the seconds field in the time string
-                record[1] = ":".join([record[1].split(":")[0], record[1].split(":")[1]])
-                if record[0] not in history.keys():
-                    history[record[0]] = {}
-                if record[1] not in history[record[0]].keys():
-                    history[record[0]][record[1]] = []
-                history[record[0]][record[1]].append(record[2:])
-
-        for date in history.keys():
-            for time in history[date].keys():
-                self.jobs[job_id] = {}
-                self.jobs[job_id]["date"] = date
-                self.jobs[job_id]["time"] = time
-                self.jobs[job_id]["data"] = []
-                [
-                    [
-                        self.jobs[job_id]["data"].append(line)
-                        for line in history[date][time]
-                    ]
-                ]
-                job_id += 1
-
-
-
-
+    def _stuffStatuses(self, job_id, status):
+        [
+            [
+                self.jobs[job_id]["data"]["status"].append(
+                    [key, status[key]["version"], status[key]["status"]]
+                )
+                for key in status.keys()
+            ]
+        ]
 
     def _print_table(self, table):
         # Use tabulate to fancy format output
@@ -171,115 +189,52 @@ class History:
         table.pop(0)
         print(tabulate.tabulate(table, headers, tablefmt=TABLEFORMAT))
 
-    def undoTransaction(self, data):
-        for key in data.keys():
-            if key in OPPOSITES.keys():
-                # Remove table headers
-                data[key].pop(0)
-                if key == "installed":
-                    [
-                        [
-                            print(
-                                item[0] + " Version: " + item[1] + " is to be removed."
-                            )
-                            for item in data[key]
-                        ]
-                    ]
-                if key == "upgraded":
-                    [
-                        [
-                            print(
-                                item[0]
-                                + " version: "
-                                + item[2]
-                                + " will be replaced with: "
-                                + item[1]
-                            )
-                            for item in data[key]
-                        ]
-                    ]
-                if key == "removed":
-                    [[print(item[0] + " will be installed") for item in data[key]]]
+    def inspect(self, job_id):
+        [[ print(item) for item in self.jobs[int(job_id)]["raw"] ]]
 
-    def redoTransaction(self, data):
-        for key in data.keys():
-            if key in STYLED_ACTIONS:
-                print(key)
-                data[key].pop(0)
-                [[print(item) for item in data[key]]]
+    def showJob(self, job_id):
+        print("Job ID: %s" % (job_id))
+        job_id = int(job_id)
+        print("Date: %s" % (self.jobs[job_id]["date"]))
+        print("Time: %s" % (self.jobs[job_id]["time"]))
+        for key in self.jobs[job_id]["data"].keys():
+            print("\n%s\n" % key.capitalize())
+            if key in OPPOSITES.keys() or key == "status":
+                self._print_table(self.jobs[job_id]["data"][key])
+            elif key == "configured":
+                [[print("  - %s" % item) for item in self.jobs[job_id]["data"][key]]]
 
     def listJobs(self):
         output = [["Job ID", "Date", "Action", "Packages Affected"]]
-        for job in self.jobs:
+        for job_id in self.jobs:
+            # Make a list for counting jobs
             affected = []
-            t = [job, self.jobs[job]["date"], []]
-            for line in self.jobs[job]["data"]:
-                if line[0] in ACTIONS and line[0] not in t[2]:
-                    t[2].append(line[0])
-                if line[1] not in affected and line[1] not in STATUSES:
-                    affected.append(line[1])
-            t.append(len(affected))
-            t[2] = ", ".join(t[2])
-            output.append(t)
+            for key in self.jobs[job_id]["data"].keys():
+                # Look for only the stylized actions we care about (not status)
+                if key in STYLED_ACTIONS:
+                    # If the package isn't already in the affected list, put it in there
+                    for row in self.jobs[job_id]["data"][key]:
+                        if (
+                            isinstance(row, list)
+                            and row[0] != "Package Name"
+                            and row[0].split(":")[0] not in affected
+                        ):
+                            affected.append(row[0].split(":")[0])
+                        elif not isinstance(row, list):
+                            affected.append(row)
+            # Bundle up the output into a nice neat table row and add it to the list
+            output.append(
+                [
+                    job_id,
+                    self.jobs[job_id]["date"] + " " + self.jobs[job_id]["time"],
+                    ", ".join(self.jobs[job_id]["data"].keys()),
+                    len(affected),
+                ]
+            )
         self._print_table(output)
 
 
-    def findJob(self, searchterm):
-        for key in data.keys():
-            print(key)
-
-
-    def parseJobReport(self, job_id):
-        info = self.jobs[int(job_id)]
-        packages = []
-        output = {}
-        output["Job Id"] = job_id
-        output["Date"] = info["date"] + " " + info["time"]
-
-        # Added headers for output table
-        output["Status"] = [["Package Name", "Version", "Status"]]
-        statuses = {}
-
-        # Parse job from records
-        for line in info["data"]:
-            if line[0] == "upgrade":
-                if "upgraded" not in output.keys():
-                    output["upgraded"] = [
-                        ["Package Name", "Old Version", "New Version"]
-                    ]
-                output["upgraded"].append(line[1:4])
-            if line[0] == "remove":
-                if "removed" not in output.keys():
-                    output["removed"] = [["Package Name", "Version"]]
-                output["removed"].append(line[1:3])
-            if line[0] == "configure":
-                if "configured" not in output.keys():
-                    output["configured"] = []
-                output["configured"].append(line[1])
-            if line[0] == "install":
-                if "installed" not in output.keys():
-                    output["installed"] = [["Package Name", "Version"]]
-                output["installed"].append([line[1], line[3]])
-            if line[0] == "status":
-                statuses[line[2].split(":")[0]] = {}
-                statuses[line[2].split(":")[0]]["Version"] = line[3]
-                statuses[line[2].split(":")[0]]["Status"] = line[1]
-        [
-            [
-                output["Status"].append(
-                    [key, statuses[key]["Version"], statuses[key]["Status"]]
-                )
-                for key in statuses
-            ]
-        ]
-
-        # Include the raw object for inspection.
-        output["raw"] = info
-        return output
-   
-
 def main():
-    history = History()
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true", help="debug switch")
     action = parser.add_mutually_exclusive_group()
@@ -293,43 +248,19 @@ def main():
     )
     args = parser.parse_args()
 
+    history = History()
+
     if args.list:
         history.listJobs()
 
-    if args.debug:
-        PP.pprint(history.jobs)
-
     if args.info:
-        output = history.parseJobReport(args.info)
-        del output["raw"]
-        # del output['status']
-        print("Job ID: " + output["Job Id"])
-        print("Date and Time: " + output["Date"])
-        del output["Date"]
-        del output["Job Id"]
-
-        for key in output.keys():
-            print("\n" + key.capitalize() + ":\n")
-            if key != "configured":
-                history._print_table(output[key])
-            elif key == "configured":
-                [[print("  - " + line) for line in output[key]]]
-        # print(yaml.dump(output, default_flow_style=False))
+        history.showJob(args.info)
 
     if args.inspect:
-        output = history.parseJobReport(args.inspect)
-        print("Job ID: " + output["Job Id"])
-        print("Date: " + output["Date"])
-        [[print(output["Date"], line) for line in output["raw"]["data"]]]
+        history.inspect(args.inspect)
 
-    if args.redo:
-        data = history.parseJobReport(args.redo)
-        history.redoTransaction(data)
-
-    if args.undo:
-        data = history.parseJobReport(args.undo)
-        history.undoTransaction(data)
-
+    if args.debug:
+        history._dumper()
 
 if __name__ == "__main__":
     main()
