@@ -190,7 +190,7 @@ class History:
         print(tabulate.tabulate(table, headers, tablefmt=TABLEFORMAT))
 
     def inspect(self, job_id):
-        [[ print(item) for item in self.jobs[int(job_id)]["raw"] ]]
+        [[print(item) for item in self.jobs[int(job_id)]["raw"]]]
 
     def showJob(self, job_id):
         print("Job ID: %s" % (job_id))
@@ -261,6 +261,7 @@ def main():
 
     if args.debug:
         history._dumper()
+
 
 if __name__ == "__main__":
     main()
