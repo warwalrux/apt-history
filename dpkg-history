@@ -37,8 +37,7 @@ class History:
             record = record.decode("utf8").rstrip().split()
             # d is a string that can be converted to an epoch time string for evaluating start and end time for jobs.
             d = " ".join([record[0], record[1]])
-            d_obj = datetime.datetime.strptime(d, '%Y-%m-%d %H:%M:%S')
-            
+            d_obj = datetime.datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
             if job_id not in self.jobs.keys():
                 self.jobs[job_id] = {}
                 self.jobs[job_id]["date"] = d_obj
@@ -46,7 +45,9 @@ class History:
                 self.jobs[job_id]["data"] = {}
 
             elif (
-                d_obj.strftime("%Y-%m-%d %H:%M") != self.jobs[job_id]["date"].strftime("%Y-%m-%d %H:%M")
+                # This is now how I'm differentiating between jobs betting that no more than 1 dpkg job will happen every 60 seconds
+                d_obj
+                >= self.jobs[job_id]["date"] + datetime.timedelta(seconds=60)
             ):
                 self._stuffStatuses(job_id, statuses)
                 statuses = {}
@@ -56,10 +57,9 @@ class History:
                 self.jobs[job_id]["raw"] = []
                 self.jobs[job_id]["data"] = {}
 
-            comp = self.jobs[job_id]["date"] + datetime.timedelta(seconds=10)
             # Parse the line without the date and time fields
             line = record[2:]
-            self.jobs[job_id]["raw"].append(line)
+            self.jobs[job_id]["raw"].append([d_obj, line])
             if line[0] == "upgrade":
                 if "upgraded" not in self.jobs[job_id]["data"].keys():
                     self.jobs[job_id]["data"]["upgraded"] = [
@@ -228,7 +228,7 @@ class History:
             output.append(
                 [
                     job_id,
-                    self.jobs[job_id]["date"].strftime('%Y-%m-%d %H:%M:%S'),
+                    self.jobs[job_id]["date"].strftime("%Y-%m-%d %H:%M:%S"),
                     ", ".join(self.jobs[job_id]["data"].keys()),
                     len(affected),
                 ]
@@ -260,7 +260,7 @@ def main():
 
     if args.inspect:
         history.inspect(args.inspect)
-    
+
     if args.redo:
         history.redoJob(args.redo)
     if args.debug:
