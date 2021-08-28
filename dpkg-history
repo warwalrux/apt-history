@@ -47,9 +47,10 @@ class History:
 
             elif (
                 self.jobs[job_id]["date"] != record[0]
-                and self.jobs[job_id]["time"] != record[1]
+                or self.jobs[job_id]["time"] != record[1]
             ):
                 self._stuffStatuses(job_id, statuses)
+                statuses = {}
                 job_id += 1
                 self.jobs[job_id] = {}
                 self.jobs[job_id]["date"] = record[0]
@@ -204,6 +205,9 @@ class History:
             elif key == "configured":
                 [[print("  - %s" % item) for item in self.jobs[job_id]["data"][key]]]
 
+    def redoJob(self, job_id):
+        print(self.jobs[int(job_id)]["data"]["configured"])
+
     def listJobs(self):
         output = [["Job ID", "Date", "Action", "Packages Affected"]]
         for job_id in self.jobs:
@@ -258,7 +262,9 @@ def main():
 
     if args.inspect:
         history.inspect(args.inspect)
-
+    
+    if args.redo:
+        history.redoJob(args.redo)
     if args.debug:
         history._dumper()
 
