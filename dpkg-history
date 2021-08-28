@@ -36,31 +36,27 @@ class History:
         for record in data:
             record = record.decode("utf8").rstrip().split()
             # d is a string that can be converted to an epoch time string for evaluating start and end time for jobs.
-            d = record[0].split("-") + record[1].split(":")
+            d = " ".join([record[0], record[1]])
+            d_obj = datetime.datetime.strptime(d, '%Y-%m-%d %H:%M:%S')
             
-            # Ignore the seconds field in the time string
-            record[1] = ":".join([record[1].split(":")[0], record[1].split(":")[1]])
-            print(record[0].split("-"))
             if job_id not in self.jobs.keys():
                 self.jobs[job_id] = {}
-                self.jobs[job_id]["date"] = record[0]
-                self.jobs[job_id]["time"] = record[1]
+                self.jobs[job_id]["date"] = d_obj
                 self.jobs[job_id]["raw"] = []
                 self.jobs[job_id]["data"] = {}
 
             elif (
-                self.jobs[job_id]["date"] != record[0]
-                or self.jobs[job_id]["time"] != record[1]
+                d_obj.strftime("%Y-%m-%d %H:%M") != self.jobs[job_id]["date"].strftime("%Y-%m-%d %H:%M")
             ):
                 self._stuffStatuses(job_id, statuses)
                 statuses = {}
                 job_id += 1
                 self.jobs[job_id] = {}
-                self.jobs[job_id]["date"] = record[0]
-                self.jobs[job_id]["time"] = record[1]
+                self.jobs[job_id]["date"] = d_obj
                 self.jobs[job_id]["raw"] = []
                 self.jobs[job_id]["data"] = {}
 
+            comp = self.jobs[job_id]["date"] + datetime.timedelta(seconds=10)
             # Parse the line without the date and time fields
             line = record[2:]
             self.jobs[job_id]["raw"].append(line)
@@ -200,7 +196,6 @@ class History:
         print("Job ID: %s" % (job_id))
         job_id = int(job_id)
         print("Date: %s" % (self.jobs[job_id]["date"]))
-        print("Time: %s" % (self.jobs[job_id]["time"]))
         for key in self.jobs[job_id]["data"].keys():
             print("\n%s\n" % key.capitalize())
             if key in OPPOSITES.keys() or key == "status":
@@ -233,7 +228,7 @@ class History:
             output.append(
                 [
                     job_id,
-                    self.jobs[job_id]["date"] + " " + self.jobs[job_id]["time"],
+                    self.jobs[job_id]["date"].strftime('%Y-%m-%d %H:%M:%S'),
                     ", ".join(self.jobs[job_id]["data"].keys()),
                     len(affected),
                 ]
