@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import argparse
+import datetime
 import os
 import pprint
 import subprocess
@@ -34,10 +35,12 @@ class History:
 
         for record in data:
             record = record.decode("utf8").rstrip().split()
-
+            # d is a string that can be converted to an epoch time string for evaluating start and end time for jobs.
+            d = record[0].split("-") + record[1].split(":")
+            
             # Ignore the seconds field in the time string
             record[1] = ":".join([record[1].split(":")[0], record[1].split(":")[1]])
-
+            print(record[0].split("-"))
             if job_id not in self.jobs.keys():
                 self.jobs[job_id] = {}
                 self.jobs[job_id]["date"] = record[0]
