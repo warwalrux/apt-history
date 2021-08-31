@@ -19,6 +19,7 @@ STYLED_OPPOSITES = ["removed", "installed", "reverted"]
 PP = pprint.PrettyPrinter(indent=4)
 TIME_SENSITIVITY = 45
 
+
 class History:
     def __init__(self):
         # Build a jobs object
@@ -41,7 +42,7 @@ class History:
             # d is a string that can be converted to an epoch time string for evaluating start and end time for jobs.
             d = " ".join([record[0], record[1]])
             d_obj = datetime.datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
-       
+
             # Initialize the first instance of d_last
             if d_last is None:
                 d_last = d_obj
@@ -59,7 +60,8 @@ class History:
 
             elif (
                 # This is now how I'm differentiating between jobs betting that no more than 1 dpkg job will happen every 60 seconds
-                d_obj.timestamp() >= d_future.timestamp()
+                d_obj.timestamp()
+                >= d_future.timestamp()
             ):
                 self._stuffStatuses(job_id, statuses)
                 self.jobs[job_id]["date"]["end"] = d_last
@@ -118,7 +120,7 @@ class History:
             )
             print(s.communicate()[0].decode("utf8"))
 
-    def run(self, data):
+    def dpkg(self, data):
         # boilerplate logic to fold a dict into a list of bash appropriate arguments to supply to self.command.
         run_args_list = [
             ["--" + key, conf[key]]
@@ -221,7 +223,14 @@ class History:
                 [[print("  - %s" % item) for item in self.jobs[job_id]["data"][key]]]
 
     def redoJob(self, job_id):
-        print(self.jobs[int(job_id)]["data"]["configured"])
+        job = self.jobs[int(job_id)]["data"]
+        for key in job.keys():
+            if key in STYLED_ACTIONS:
+                data = job[key]
+                # Strip table headers
+                if key in OPPOSITES.keys():
+                    data = data.pop()
+                print(key, data)
 
     def listJobs(self):
         output = [["Job ID", "Start", "Finish", "Action", "Packages Affected"]]
@@ -243,11 +252,11 @@ class History:
                             affected.append(row)
             # Bundle up the output into a nice neat table row and add it to the list
             row = [
-                    job_id,
-                    self.jobs[job_id]["date"]["start"].strftime("%Y-%m-%d %H:%M:%S"),
-                    self.jobs[job_id]["date"]["end"].strftime("%Y-%m-%d %H:%M:%S"),
-                    ", ".join(self.jobs[job_id]["data"].keys()),
-                    len(affected),
+                job_id,
+                self.jobs[job_id]["date"]["start"].strftime("%Y-%m-%d %H:%M:%S"),
+                self.jobs[job_id]["date"]["end"].strftime("%Y-%m-%d %H:%M:%S"),
+                ", ".join(self.jobs[job_id]["data"].keys()),
+                len(affected),
             ]
             output.append(row)
         self._print_table(output)
