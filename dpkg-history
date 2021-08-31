@@ -17,7 +17,7 @@ STYLED_ACTIONS = ["installed", "removed", "upgraded", "configured"]
 OPPOSITES = {"installed": "remove", "removed": "install", "upgraded": "revert"}
 STYLED_OPPOSITES = ["removed", "installed", "reverted"]
 PP = pprint.PrettyPrinter(indent=4)
-
+TIME_SENSITIVITY = 30
 
 class History:
     def __init__(self):
@@ -33,27 +33,41 @@ class History:
         else:
             print("%s Not Found!" % (DPKG_LOGFILE))
 
+        # Time stamp for the previous line
+        d_last = None
+
         for record in data:
             record = record.decode("utf8").rstrip().split()
             # d is a string that can be converted to an epoch time string for evaluating start and end time for jobs.
             d = " ".join([record[0], record[1]])
             d_obj = datetime.datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
+       
+            # Initialize the first instance of d_last
+            if d_last is None:
+                d_last = d_obj
+
+            # set a comparison value to determine whether or not this row belongs to the same job
+            # TIME_SENSITIVITY (in seconds) makes the differentiation via comparison
+            d_future = d_last + datetime.timedelta(seconds=TIME_SENSITIVITY)
+
             if job_id not in self.jobs.keys():
                 self.jobs[job_id] = {}
-                self.jobs[job_id]["date"] = d_obj
+                self.jobs[job_id]["date"] = {}
+                self.jobs[job_id]["date"]["start"] = d_obj
                 self.jobs[job_id]["raw"] = []
                 self.jobs[job_id]["data"] = {}
 
             elif (
                 # This is now how I'm differentiating between jobs betting that no more than 1 dpkg job will happen every 60 seconds
-                d_obj
-                >= self.jobs[job_id]["date"] + datetime.timedelta(seconds=60)
+                d_obj.timestamp() >= d_future.timestamp()
             ):
                 self._stuffStatuses(job_id, statuses)
+                self.jobs[job_id]["date"]["end"] = d_last
                 statuses = {}
                 job_id += 1
                 self.jobs[job_id] = {}
-                self.jobs[job_id]["date"] = d_obj
+                self.jobs[job_id]["date"] = {}
+                self.jobs[job_id]["date"]["start"] = d_obj
                 self.jobs[job_id]["raw"] = []
                 self.jobs[job_id]["data"] = {}
 
@@ -89,6 +103,8 @@ class History:
                     statuses[line[2].split(":")[0]] = {}
                     statuses[line[2].split(":")[0]]["version"] = line[3]
                 statuses[line[2].split(":")[0]]["status"] = line[1]
+            d_last = d_obj
+        self.jobs[job_id]["date"]["end"] = d_last
 
     def apt(self, args):
         if PACKAGE_HANDLER == "apt":
@@ -195,7 +211,8 @@ class History:
     def showJob(self, job_id):
         print("Job ID: %s" % (job_id))
         job_id = int(job_id)
-        print("Date: %s" % (self.jobs[job_id]["date"]))
+        print("Start: %s" % (self.jobs[job_id]["date"]["start"]))
+        print("End: %s" % (self.jobs[job_id]["date"]["end"]))
         for key in self.jobs[job_id]["data"].keys():
             print("\n%s\n" % key.capitalize())
             if key in OPPOSITES.keys() or key == "status":
@@ -207,7 +224,7 @@ class History:
         print(self.jobs[int(job_id)]["data"]["configured"])
 
     def listJobs(self):
-        output = [["Job ID", "Date", "Action", "Packages Affected"]]
+        output = [["Job ID", "Start", "Finish", "Action", "Packages Affected"]]
         for job_id in self.jobs:
             # Make a list for counting jobs
             affected = []
@@ -225,14 +242,14 @@ class History:
                         elif not isinstance(row, list):
                             affected.append(row)
             # Bundle up the output into a nice neat table row and add it to the list
-            output.append(
-                [
+            row = [
                     job_id,
-                    self.jobs[job_id]["date"].strftime("%Y-%m-%d %H:%M:%S"),
+                    self.jobs[job_id]["date"]["start"].strftime("%Y-%m-%d %H:%M:%S"),
+                    self.jobs[job_id]["date"]["end"].strftime("%Y-%m-%d %H:%M:%S"),
                     ", ".join(self.jobs[job_id]["data"].keys()),
                     len(affected),
-                ]
-            )
+            ]
+            output.append(row)
         self._print_table(output)
 
 
