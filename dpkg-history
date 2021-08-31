@@ -17,7 +17,7 @@ STYLED_ACTIONS = ["installed", "removed", "upgraded", "configured"]
 OPPOSITES = {"installed": "remove", "removed": "install", "upgraded": "revert"}
 STYLED_OPPOSITES = ["removed", "installed", "reverted"]
 PP = pprint.PrettyPrinter(indent=4)
-TIME_SENSITIVITY = 30
+TIME_SENSITIVITY = 45
 
 class History:
     def __init__(self):
