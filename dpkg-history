@@ -2,23 +2,39 @@
 
 import argparse
 import datetime
+import gzip
 import os
 import pprint
+import re
 import subprocess
 import sys
 import tabulate
 import pprint
 
+# SCRIPT CONFIGURABLES
+# Output table format
 TABLEFORMAT = "github"
-DPKG_LOGFILE = "/var/log/dpkg.log"
+
+# Define DPKG log location
+DPKG_LOGLOC = "/var/log"
+
+# Default package handler for undo-ing / redo-ing transactions
 PACKAGE_HANDLER = "apt"
+
+# Maximum duration in seconds between two lines of record and still being in the same job.
+TIME_SENSITIVITY = 60
+
+# Maximum number of days of history to show in list jobs
+SHOW_ONLY_LAST = 90
+
+# Debugging tool 
+PP = pprint.PrettyPrinter(indent=4)
+
+# Some basic lingual definitions for logfile parsing
 ACTIONS = ["install", "remove", "upgrade", "configure"]
 STYLED_ACTIONS = ["installed", "removed", "upgraded", "configured"]
 OPPOSITES = {"installed": "remove", "removed": "install", "upgraded": "revert"}
 STYLED_OPPOSITES = ["removed", "installed", "reverted"]
-PP = pprint.PrettyPrinter(indent=4)
-TIME_SENSITIVITY = 45
-
 
 class History:
     def __init__(self):
@@ -26,14 +42,7 @@ class History:
         self.jobs = {}
         statuses = {}
         job_id = 1
-        if os.path.isfile(DPKG_LOGFILE):
-            history = {}
-            with open(DPKG_LOGFILE, "rb") as f:
-                data = f.readlines()
-            f.close()
-        else:
-            print("%s Not Found!" % (DPKG_LOGFILE))
-
+        data = self._find_sources()
         # Time stamp for the previous line
         d_last = None
 
@@ -108,6 +117,39 @@ class History:
             d_last = d_obj
         self.jobs[job_id]["date"]["end"] = d_last
 
+    def _find_sources(self):
+        sources = []
+        [ sources.append(logfile) if "dpkg.log" in logfile else "" for logfile in os.listdir(DPKG_LOGLOC) ]
+        sources.sort(reverse=True)
+        raw = []
+        for source in sources:
+            if source.split(".")[-1] == "gz":
+                with gzip.open(os.path.join(DPKG_LOGLOC, source), "rb") as f:
+                    [ raw.append(line) for line in f.readlines() ]
+            else:
+                with open(os.path.join("/var/log", source), "rb") as f:
+                    [ raw.append(line) for line in f.readlines() ]
+        return(raw)
+
+    def _dumper(self):
+        PP.pprint(self.jobs)
+
+    def _stuffStatuses(self, job_id, status):
+        [
+            [
+                self.jobs[job_id]["data"]["status"].append(
+                    [key, status[key]["version"], status[key]["status"]]
+                )
+                for key in status.keys()
+            ]
+        ]
+
+    def _print_table(self, table):
+        # Use tabulate to fancy format output
+        headers = table[0]
+        table.pop(0)
+        print(tabulate.tabulate(table, headers, tablefmt=TABLEFORMAT))
+
     def apt(self, args):
         if PACKAGE_HANDLER == "apt":
             # construct the command string
@@ -175,7 +217,7 @@ class History:
         # construct the command string
         runcmd = [self.commands["reconfigure"]]
         runcmd.extend(self.run_args)
-        runcmd.extend(self.run_flags)
+        uncmd.extend(self.run_flags)
 
         # optionally if a precmd command is specified as a list we can run it and pipe the output to dpkg! neat!!!
         if "precmd" in conf.keys() and conf["precmd"] is not None:
@@ -187,25 +229,6 @@ class History:
         else:
             s = subprocess.Popen(runcmd, stdout=subprocess.PIPE)
             print(s.communicate()[0].decode("utf8"))
-
-    def _dumper(self):
-        PP.pprint(self.jobs)
-
-    def _stuffStatuses(self, job_id, status):
-        [
-            [
-                self.jobs[job_id]["data"]["status"].append(
-                    [key, status[key]["version"], status[key]["status"]]
-                )
-                for key in status.keys()
-            ]
-        ]
-
-    def _print_table(self, table):
-        # Use tabulate to fancy format output
-        headers = table[0]
-        table.pop(0)
-        print(tabulate.tabulate(table, headers, tablefmt=TABLEFORMAT))
 
     def inspect(self, job_id):
         [[print(item) for item in self.jobs[int(job_id)]["raw"]]]
@@ -233,6 +256,7 @@ class History:
                 print(key, data)
 
     def listJobs(self):
+        no_older = datetime.datetime.now() - datetime.timedelta(days = SHOW_ONLY_LAST)
         output = [["Job ID", "Start", "Finish", "Action", "Packages Affected"]]
         for job_id in self.jobs:
             # Make a list for counting jobs
@@ -251,14 +275,17 @@ class History:
                         elif not isinstance(row, list):
                             affected.append(row)
             # Bundle up the output into a nice neat table row and add it to the list
-            row = [
-                job_id,
-                self.jobs[job_id]["date"]["start"].strftime("%Y-%m-%d %H:%M:%S"),
-                self.jobs[job_id]["date"]["end"].strftime("%Y-%m-%d %H:%M:%S"),
-                ", ".join(self.jobs[job_id]["data"].keys()),
-                len(affected),
-            ]
-            output.append(row)
+            if self.jobs[job_id]["date"]["start"] >= no_older:
+                row = [
+                    job_id,
+                    self.jobs[job_id]["date"]["start"].strftime("%Y-%m-%d %H:%M:%S"),
+                    self.jobs[job_id]["date"]["end"].strftime("%Y-%m-%d %H:%M:%S"),
+                    ", ".join(self.jobs[job_id]["data"].keys()),
+                    len(affected),
+                ]
+                output.append(row)
+            else:
+                continue
         self._print_table(output)
 
 
@@ -289,6 +316,7 @@ def main():
 
     if args.redo:
         history.redoJob(args.redo)
+
     if args.debug:
         history._dumper()
 
