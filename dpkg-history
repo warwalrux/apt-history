@@ -24,9 +24,6 @@ PACKAGE_HANDLER = "apt"
 # Maximum duration in seconds between two lines of record and still being in the same job.
 TIME_SENSITIVITY = 60
 
-# Maximum number of days of history to show in list jobs
-SHOW_ONLY_LAST = 90
-
 # Debugging tool 
 PP = pprint.PrettyPrinter(indent=4)
 
@@ -255,8 +252,10 @@ class History:
                     data = data.pop()
                 print(key, data)
 
-    def listJobs(self):
-        no_older = datetime.datetime.now() - datetime.timedelta(days = SHOW_ONLY_LAST)
+    def listJobs(self, show_only):
+        if show_only != "all":
+            no_older = datetime.datetime.now() - datetime.timedelta(days = int(show_only))
+
         output = [["Job ID", "Start", "Finish", "Action", "Packages Affected"]]
         for job_id in self.jobs:
             # Make a list for counting jobs
@@ -275,23 +274,27 @@ class History:
                         elif not isinstance(row, list):
                             affected.append(row)
             # Bundle up the output into a nice neat table row and add it to the list
-            if self.jobs[job_id]["date"]["start"] >= no_older:
-                row = [
-                    job_id,
-                    self.jobs[job_id]["date"]["start"].strftime("%Y-%m-%d %H:%M:%S"),
-                    self.jobs[job_id]["date"]["end"].strftime("%Y-%m-%d %H:%M:%S"),
-                    ", ".join(self.jobs[job_id]["data"].keys()),
-                    len(affected),
-                ]
+            row = [
+                job_id,
+                self.jobs[job_id]["date"]["start"].strftime("%Y-%m-%d %H:%M:%S"),
+                self.jobs[job_id]["date"]["end"].strftime("%Y-%m-%d %H:%M:%S"),
+                ", ".join(self.jobs[job_id]["data"].keys()),
+                len(affected),
+            ]
+
+            if show_only != "all" and self.jobs[job_id]["date"]["start"] > no_older:
                 output.append(row)
-            else:
-                continue
+            elif show_only == "all":
+                output.append(row)
         self._print_table(output)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true", help="debug switch")
+    show = parser.add_mutually_exclusive_group()
+    show.add_argument("--show-last", help="Show last <num> days of transactions")
+    show.add_argument("--show-all", action="store_true", help="Show last <num> days of transactions")
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--list", action="store_true", help="Show dpkg transactions")
     action.add_argument("--info", help="Show transaction report by ID")
@@ -306,7 +309,12 @@ def main():
     history = History()
 
     if args.list:
-        history.listJobs()
+        show_only = 30
+        if args.show_last:
+            show_only = args.show_last
+        if args.show_all:
+            show_only = "all"
+        history.listJobs(show_only)
 
     if args.info:
         history.showJob(args.info)
@@ -318,8 +326,7 @@ def main():
         history.redoJob(args.redo)
 
     if args.debug:
-        history._dumper()
-
+        print(args)
 
 if __name__ == "__main__":
     main()
