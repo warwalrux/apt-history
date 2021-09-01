@@ -312,7 +312,7 @@ class History:
 
 def main():
     parser = argparse.ArgumentParser()
-#    parser.add_argument("--debug", action="store_true", help="debug switch")
+    parser.add_argument("--debug", action="store_true", help="debug switch")
     show = parser.add_mutually_exclusive_group()
     show.add_argument("--show-last", help="Show last <num> days of transactions")
     show.add_argument("--show-all", action="store_true", help="Show last <num> days of transactions")
@@ -320,11 +320,11 @@ def main():
     action.add_argument("--list", action="store_true", help="Show dpkg transactions")
     action.add_argument("--info", help="Show transaction report by ID")
     action.add_argument("--inspect", help="Show detailed transaction data")
-#    action.add_argument("--redo", help="Redo transaction by ID")
-#    action.add_argument("--undo", help="Undo transaction by ID")
-#    action.add_argument(
-#        "--find", help="search for transactions including the provided string"
-#    )
+    action.add_argument("--redo", help="Redo transaction by ID")
+    action.add_argument("--undo", help="Undo transaction by ID")
+    action.add_argument(
+        "--find", help="search for transactions including the provided string"
+    )
     args = parser.parse_args()
 
     history = History()
