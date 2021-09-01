@@ -6,6 +6,7 @@ import gzip
 import os
 import pprint
 import re
+import shutil
 import subprocess
 import sys
 import tabulate
@@ -22,7 +23,7 @@ DPKG_LOGLOC = "/var/log"
 PACKAGE_HANDLER = "apt"
 
 # Maximum duration in seconds between two lines of record and still being in the same job.
-TIME_SENSITIVITY = 60
+TIME_SENSITIVITY = 45
 
 # Debugging tool 
 PP = pprint.PrettyPrinter(indent=4)
@@ -30,13 +31,18 @@ PP = pprint.PrettyPrinter(indent=4)
 # Some basic lingual definitions for logfile parsing
 ACTIONS = ["install", "remove", "upgrade", "configure"]
 STYLED_ACTIONS = ["installed", "removed", "upgraded", "configured"]
-OPPOSITES = {"installed": "remove", "removed": "install", "upgraded": "revert"}
+OPPOSITES = {"installed": "purge", "removed": ["install", "-y"], "upgraded": "revert"}
 STYLED_OPPOSITES = ["removed", "installed", "reverted"]
 
 class History:
     def __init__(self):
         # Build a jobs object
         self.jobs = {}
+        self.commands = {
+            'apt': shutil.which('apt-get'),
+            'dpkg': shutil.which('dpkg'),
+            'reconfigure': shutil.which('dpkg-reconfigure')
+        }
         statuses = {}
         job_id = 1
         data = self._find_sources()
@@ -155,8 +161,9 @@ class History:
             runcmd = [self.commands["apt"]]
             runcmd.extend(args)
             s = subprocess.Popen(
-                runcmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+                runcmd, stdout=subprocess.PIPE
             )
+#            print(s.communicate())
             print(s.communicate()[0].decode("utf8"))
 
     def dpkg(self, data):
@@ -252,6 +259,20 @@ class History:
                     data = data.pop()
                 print(key, data)
 
+    def undoJob(self, job_id):
+        job = self.jobs[int(job_id)]["data"]
+        for key in job.keys():
+            if key in STYLED_ACTIONS:
+                data = job[key]
+                # Strip table headers
+                if key in OPPOSITES.keys():
+                    data.pop(0)
+                    for record in data:
+                        if key == "removed":
+                            self.apt([OPPOSITES[key][0], "=".join(record), OPPOSITES[key][1]])
+                        else:
+                            self.apt([OPPOSITES[key], "=".join(record)])
+
     def listJobs(self, show_only):
         if show_only != "all":
             no_older = datetime.datetime.now() - datetime.timedelta(days = int(show_only))
@@ -324,6 +345,9 @@ def main():
 
     if args.redo:
         history.redoJob(args.redo)
+
+    if args.undo:
+        history.undoJob(args.undo)
 
     if args.debug:
         print(args)
