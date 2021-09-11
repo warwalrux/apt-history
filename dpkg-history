@@ -42,25 +42,30 @@ class History:
         statuses = {}
         job_id = 0
         apt_data = self._find_sources(APT_LOGDIR, "history.log")
-        self.dpkg_records = [[ record.decode("utf8").split() for record in self._find_sources(DPKG_LOGDIR, "dpkg.log") ]]
+        self.dpkg_records = [ record.decode("utf8").split() for record in self._find_sources(DPKG_LOGDIR, "dpkg.log") ]
         for item in apt_data:
             item = item.decode('utf8').rstrip('\n')
             if item == "":
                 job_id+=1
                 self.jobs[job_id] = {}
-                self.jobs[job_id]['data'] = []
+                self.jobs[job_id]["data"] = []
                 continue
             elif item.split(":")[0] == "Start-Date" or item.split(":")[0] == "End-Date":
                 self.jobs[job_id][item.split(":")[0].lower().replace("-","_")] = item.replace(item.split(":")[0] + ": ",'').replace("  "," ")
             else:
                 self.jobs[job_id][item.split(":")[0].lower()] = item.replace(item.split(":")[0] + ": ",'')
-            self._interpolate_dpkg(job_id)
+        self._interpolate_dpkg(job_id)
+        PP.pprint(self.jobs)
+
     def _interpolate_dpkg(self, job_id):
-        print(job_id)
-        print(self.jobs[job_id].keys())
+        start = datetime.datetime.fromisoformat(self.jobs[job_id]["start_date"])
+        end = datetime.datetime.fromisoformat(self.jobs[job_id]["end_date"])
+        print(job_id)        
         for record in self.dpkg_records:
-            if record[0] == self.jobs[job_id]["start_date"].split()[0]:
+            cur = datetime.datetime.fromisoformat(" ".join([record[0], record[1]]))
+            if start <= cur <= end:
                 print(record)
+                self.jobs[job_id]['data'].append(record)
 #            # Parse the line without the date and time fields
 #            line = record[2:]
 #            self.jobs[job_id]["raw"].append([d_obj, line])
