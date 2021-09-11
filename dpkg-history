@@ -17,7 +17,8 @@ import pprint
 TABLEFORMAT = "github"
 
 # Define DPKG log location
-DPKG_LOGLOC = "/var/log"
+DPKG_LOGDIR = "/var/log"
+APT_LOGDIR = "/var/log/apt"
 
 # Default package handler for undo-ing / redo-ing transactions
 PACKAGE_HANDLER = "apt"
@@ -36,106 +37,78 @@ STYLED_OPPOSITES = ["removed", "installed", "reverted"]
 
 class History:
     def __init__(self):
-        # Build a jobs object
+        # Build a jobs object based on apts history.log
         self.jobs = {}
-        self.commands = {
-            'apt': shutil.which('apt-get'),
-            'dpkg': shutil.which('dpkg'),
-            'reconfigure': shutil.which('dpkg-reconfigure')
-        }
         statuses = {}
-        job_id = 1
-        data = self._find_sources()
-        # Time stamp for the previous line
-        d_last = None
-
-        for record in data:
-            record = record.decode("utf8").rstrip().split()
-            # d is a string that can be converted to an epoch time string for evaluating start and end time for jobs.
-            d = " ".join([record[0], record[1]])
-            d_obj = datetime.datetime.fromisoformat(d)
-
-            # Initialize the first instance of d_last
-            if d_last is None:
-                d_last = d_obj
-
-            # set a comparison value to determine whether or not this row belongs to the same job
-            # TIME_SENSITIVITY (in seconds) makes the differentiation via comparison
-            d_future = d_last + datetime.timedelta(seconds=TIME_SENSITIVITY)
-
-            if job_id not in self.jobs.keys():
+        job_id = 0
+        apt_data = self._find_sources(APT_LOGDIR, "history.log")
+        self.dpkg_records = [[ record.decode("utf8").split() for record in self._find_sources(DPKG_LOGDIR, "dpkg.log") ]]
+        for item in apt_data:
+            item = item.decode('utf8').rstrip('\n')
+            if item == "":
+                job_id+=1
                 self.jobs[job_id] = {}
-                self.jobs[job_id]["date"] = {}
-                self.jobs[job_id]["date"]["start"] = d_obj
-                self.jobs[job_id]["raw"] = []
-                self.jobs[job_id]["data"] = {}
+                self.jobs[job_id]['data'] = []
+                continue
+            elif item.split(":")[0] == "Start-Date" or item.split(":")[0] == "End-Date":
+                self.jobs[job_id][item.split(":")[0].lower().replace("-","_")] = item.replace(item.split(":")[0] + ": ",'').replace("  "," ")
+            else:
+                self.jobs[job_id][item.split(":")[0].lower()] = item.replace(item.split(":")[0] + ": ",'')
+            self._interpolate_dpkg(job_id)
+    def _interpolate_dpkg(self, job_id):
+        print(job_id)
+        print(self.jobs[job_id].keys())
+        for record in self.dpkg_records:
+            if record[0] == self.jobs[job_id]["start_date"].split()[0]:
+                print(record)
+#            # Parse the line without the date and time fields
+#            line = record[2:]
+#            self.jobs[job_id]["raw"].append([d_obj, line])
+#            if line[0] == "upgrade":
+#                if "upgraded" not in self.jobs[job_id]["data"].keys():
+#                    self.jobs[job_id]["data"]["upgraded"] = [
+#                        ["Package Name", "Old Version", "New Version"]
+#                    ]
+#                self.jobs[job_id]["data"]["upgraded"].append(line[1:4])
+#            if line[0] == "remove":
+#                if "removed" not in self.jobs[job_id]["data"].keys():
+#                    self.jobs[job_id]["data"]["removed"] = [["Package Name", "Version"]]
+#                self.jobs[job_id]["data"]["removed"].append(line[1:3])
+#            if line[0] == "configure":
+#                if "configured" not in self.jobs[job_id]["data"].keys():
+#                    self.jobs[job_id]["data"]["configured"] = []
+#                self.jobs[job_id]["data"]["configured"].append(line[1])
+#            if line[0] == "install":
+#                if "installed" not in self.jobs[job_id]["data"].keys():
+#                    self.jobs[job_id]["data"]["installed"] = [
+#                        ["Package Name", "Version"]
+#                    ]
+#                self.jobs[job_id]["data"]["installed"].append([line[1], line[3]])
+#            if line[0] == "status":
+#                if "status" not in self.jobs[job_id]["data"].keys():
+#                    self.jobs[job_id]["data"]["status"] = [
+#                        ["Package Name", "Version", "Status"]
+#                    ]
+#                if line[2].split(":")[0] not in statuses.keys():
+#                    statuses[line[2].split(":")[0]] = {}
+#                    statuses[line[2].split(":")[0]]["version"] = line[3]
+#                statuses[line[2].split(":")[0]]["status"] = line[1]
+#            d_last = d_obj
+#        self.jobs[job_id]["date"]["end"] = d_last
 
-            elif (
-                # This is now how I'm differentiating between jobs betting that no more than 1 dpkg job will happen every 60 seconds
-                d_obj.timestamp()
-                >= d_future.timestamp()
-            ):
-                self._stuffStatuses(job_id, statuses)
-                self.jobs[job_id]["date"]["end"] = d_last
-                statuses = {}
-                job_id += 1
-                self.jobs[job_id] = {}
-                self.jobs[job_id]["date"] = {}
-                self.jobs[job_id]["date"]["start"] = d_obj
-                self.jobs[job_id]["raw"] = []
-                self.jobs[job_id]["data"] = {}
-
-            # Parse the line without the date and time fields
-            line = record[2:]
-            self.jobs[job_id]["raw"].append([d_obj, line])
-            if line[0] == "upgrade":
-                if "upgraded" not in self.jobs[job_id]["data"].keys():
-                    self.jobs[job_id]["data"]["upgraded"] = [
-                        ["Package Name", "Old Version", "New Version"]
-                    ]
-                self.jobs[job_id]["data"]["upgraded"].append(line[1:4])
-            if line[0] == "remove":
-                if "removed" not in self.jobs[job_id]["data"].keys():
-                    self.jobs[job_id]["data"]["removed"] = [["Package Name", "Version"]]
-                self.jobs[job_id]["data"]["removed"].append(line[1:3])
-            if line[0] == "configure":
-                if "configured" not in self.jobs[job_id]["data"].keys():
-                    self.jobs[job_id]["data"]["configured"] = []
-                self.jobs[job_id]["data"]["configured"].append(line[1])
-            if line[0] == "install":
-                if "installed" not in self.jobs[job_id]["data"].keys():
-                    self.jobs[job_id]["data"]["installed"] = [
-                        ["Package Name", "Version"]
-                    ]
-                self.jobs[job_id]["data"]["installed"].append([line[1], line[3]])
-            if line[0] == "status":
-                if "status" not in self.jobs[job_id]["data"].keys():
-                    self.jobs[job_id]["data"]["status"] = [
-                        ["Package Name", "Version", "Status"]
-                    ]
-                if line[2].split(":")[0] not in statuses.keys():
-                    statuses[line[2].split(":")[0]] = {}
-                    statuses[line[2].split(":")[0]]["version"] = line[3]
-                statuses[line[2].split(":")[0]]["status"] = line[1]
-            d_last = d_obj
-        self.jobs[job_id]["date"]["end"] = d_last
-
-    def _find_sources(self):
+    def _find_sources(self, location, fname):
         sources = []
-        [ sources.append(logfile) if "dpkg.log" in logfile else "" for logfile in os.listdir(DPKG_LOGLOC) ]
+        [ sources.append(logfile) if fname in logfile else "" for logfile in os.listdir(location) ]
         sources.sort(reverse=True)
         raw = []
         for source in sources:
             if source.split(".")[-1] == "gz":
-                with gzip.open(os.path.join(DPKG_LOGLOC, source), "rb") as f:
+                with gzip.open(os.path.join(location, source), "rb") as f:
                     [ raw.append(line) for line in f.readlines() ]
             else:
-                with open(os.path.join("/var/log", source), "rb") as f:
+                with open(os.path.join(location, source), "rb") as f:
                     [ raw.append(line) for line in f.readlines() ]
         return(raw)
-
-    def _dumper(self):
-        PP.pprint(self.jobs)
 
     def _stuffStatuses(self, job_id, status):
         [
@@ -153,157 +126,35 @@ class History:
         table.pop(0)
         print(tabulate.tabulate(table, headers, tablefmt=TABLEFORMAT))
 
-    def apt(self, args):
-        if PACKAGE_HANDLER == "apt":
-            # construct the command string
-            # literally takes a list of arguments that are to be fed to apt.
-            # _way_ less cool, but apt is currently not `-/--` argument based.
-            runcmd = [self.commands["apt"]]
-            runcmd.extend(args)
-            s = subprocess.Popen(
-                runcmd, stdout=subprocess.PIPE
-            )
-#            print(s.communicate())
-            print(s.communicate()[0].decode("utf8"))
-
-    def dpkg(self, data):
-        # boilerplate logic to fold a dict into a list of bash appropriate arguments to supply to self.command.
-        run_args_list = [
-            ["--" + key, conf[key]]
-            for key in conf.keys()
-            if key not in self.unacceptable_tags
-            and conf[key] is not None
-            and conf[key] is not True
-            and conf[key] is not False
-        ]
-        run_args_flags = [
-            ["--" + key, conf[key]]
-            for key in conf.keys()
-            if key not in self.unacceptable_tags and conf[key] is True
-        ]
-        self.run_args = [arg for args_pair in run_args_list for arg in args_pair]
-        self.run_flags = [arg[0] for arg in run_args_flags]
-
-        # construct the command string
-        runcmd = [self.commands["dpkg"]]
-        runcmd.extend(self.run_args)
-        runcmd.extend(self.run_flags)
-
-        # optionally if a precmd command is specified as a list we can run it and pipe the output to dpkg! neat!!!
-        if "precmd" in conf.keys() and conf["precmd"] is not None:
-            p = subprocess.Popen(conf["precmd"], stdout=subprocess.PIPE)
-            s = subprocess.Popen(runcmd, stdin=p.stdout, stdout=subprocess.PIPE)
-            print(s.communicate()[0].decode("utf8"))
-
-        # otherwise just run the damned code.
-        else:
-            s = subprocess.Popen(runcmd, stdout=subprocess.PIPE)
-            print(s.communicate()[0].decode("utf8"))
-
-    def reconfigure(self, data):
-        # boilerplate logic to fold a dict into a list of bash appropriate arguments to supply to self.command.
-        run_args_list = [
-            ["--" + key, conf[key]]
-            for key in conf.keys()
-            if key not in self.unacceptable_tags
-            and conf[key] is not None
-            and conf[key] is not True
-            and conf[key] is not False
-        ]
-        run_args_flags = [
-            ["--" + key, conf[key]]
-            for key in conf.keys()
-            if key not in self.unacceptable_tags and conf[key] is True
-        ]
-        self.run_args = [arg for args_pair in run_args_list for arg in args_pair]
-        self.run_flags = [arg[0] for arg in run_args_flags]
-
-        # construct the command string
-        runcmd = [self.commands["reconfigure"]]
-        runcmd.extend(self.run_args)
-        uncmd.extend(self.run_flags)
-
-        # optionally if a precmd command is specified as a list we can run it and pipe the output to dpkg! neat!!!
-        if "precmd" in conf.keys() and conf["precmd"] is not None:
-            p = subprocess.Popen(conf["precmd"], stdout=subprocess.PIPE)
-            s = subprocess.Popen(runcmd, stdin=p.stdout, stdout=subprocess.PIPE)
-            print(s.communicate()[0].decode("utf8"))
-
-        # otherwise just run the damned code.
-        else:
-            s = subprocess.Popen(runcmd, stdout=subprocess.PIPE)
-            print(s.communicate()[0].decode("utf8"))
-
-    def inspect(self, job_id):
-        [[print(item) for item in self.jobs[int(job_id)]["raw"]]]
-
-    def showJob(self, job_id):
-        print("Job ID: %s" % (job_id))
-        job_id = int(job_id)
-        print("Start: %s" % (self.jobs[job_id]["date"]["start"]))
-        print("End: %s" % (self.jobs[job_id]["date"]["end"]))
-        for key in self.jobs[job_id]["data"].keys():
-            print("\n%s\n" % key.capitalize())
-            if key in OPPOSITES.keys() or key == "status":
-                self._print_table(self.jobs[job_id]["data"][key])
-            elif key == "configured":
-                [[print("  - %s" % item) for item in self.jobs[job_id]["data"][key]]]
-
-    def redoJob(self, job_id):
-        job = self.jobs[int(job_id)]["data"]
-        for key in job.keys():
-            if key in STYLED_ACTIONS:
-                data = job[key]
-                # Strip table headers
-                if key in OPPOSITES.keys():
-                    data = data.pop()
-                print(key, data)
-
-    def undoJob(self, job_id):
-        job = self.jobs[int(job_id)]["data"]
-        for key in job.keys():
-            if key in STYLED_ACTIONS:
-                data = job[key]
-                # Strip table headers
-                if key in OPPOSITES.keys():
-                    data.pop(0)
-                    for record in data:
-                        if key == "removed":
-                            self.apt([OPPOSITES[key][0], "=".join(record), OPPOSITES[key][1]])
-                        else:
-                            self.apt([OPPOSITES[key], "=".join(record)])
-
     def listJobs(self, show_only):
         if show_only != "all":
             no_older = datetime.datetime.now() - datetime.timedelta(days = int(show_only))
 
-        output = [["Job ID", "Start", "Finish", "Action", "Packages Affected"]]
-        for job_id in self.jobs:
+        output = [["Job ID", "Start", "Finish"]]
+        for job_id in self.jobs.keys():
+            print(self.jobs[job_id]["start_date"])
             # Make a list for counting jobs
-            affected = []
-            for key in self.jobs[job_id]["data"].keys():
-                # Look for only the stylized actions we care about (not status)
-                if key in STYLED_ACTIONS:
-                    # If the package isn't already in the affected list, put it in there
-                    for row in self.jobs[job_id]["data"][key]:
-                        if (
-                            isinstance(row, list)
-                            and row[0] != "Package Name"
-                            and row[0].split(":")[0] not in affected
-                        ):
-                            affected.append(row[0].split(":")[0])
-                        elif not isinstance(row, list):
-                            affected.append(row)
-            # Bundle up the output into a nice neat table row and add it to the list
+#            for key in self.jobs[job_id]["data"].keys():
+#                # Look for only the stylized actions we care about (not status)
+#                if key in STYLED_ACTIONS:
+#                    # If the package isn't already in the affected list, put it in there
+#                    for row in self.jobs[job_id]["data"][key]:
+#                        if (
+#                            isinstance(row, list)
+#                            and row[0] != "Package Name"
+#                            and row[0].split(":")[0] not in affected
+#                        ):
+#                            affected.append(row[0].split(":")[0])
+#                        elif not isinstance(row, list):
+#                            affected.append(row)
+#            # Bundle up the output into a nice neat table row and add it to the list
             row = [
                 job_id,
-                self.jobs[job_id]["date"]["start"].strftime("%Y-%m-%d %H:%M:%S"),
-                self.jobs[job_id]["date"]["end"].strftime("%Y-%m-%d %H:%M:%S"),
-                ", ".join(self.jobs[job_id]["data"].keys()),
-                len(affected),
+                self.jobs[job_id]['start_date'],
+                self.jobs[job_id]["end_date"],
             ]
-
-            if show_only != "all" and self.jobs[job_id]["date"]["start"] > no_older:
+#
+            if show_only != "all" and datetime.datetime.fromisoformat(self.jobs[job_id]["start_date"]) > no_older:
                 output.append(row)
             elif show_only == "all":
                 output.append(row)
