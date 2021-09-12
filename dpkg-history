@@ -3,6 +3,7 @@
 import argparse
 import datetime
 import gzip
+import jinja2
 import os
 import pprint
 import re
@@ -107,7 +108,21 @@ class History:
 
 
     def showJob(self, job_id):
-        PP.pprint(self.jobs[int(job_id)])
+        job = self.jobs[int(job_id)]
+        if "requested_by" not in job.keys():
+            job["requested_by"] = "system"
+        string = """Job Id:\t\t{{ job_id }}
+Start Date:\t{{ start_date }}
+End Date:\t{{ end_date }}
+User:\t\t{{ user }}
+"""
+
+        j = jinja2.Template(string)
+        print(j.render(job_id=job_id,start_date=job["start_date"],end_date=job["end_date"],user=job["requested_by"]))
+        for action in job["actions"].keys():
+            print(action.capitalize())
+            for package in job["actions"][action]:
+                print("  * " + package[0].lstrip())
 
 
 def main():
