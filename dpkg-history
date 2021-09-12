@@ -30,10 +30,8 @@ TIME_SENSITIVITY = 45
 PP = pprint.PrettyPrinter(indent=4)
 
 # Some basic lingual definitions for logfile parsing
-ACTIONS = ["install", "remove", "upgrade", "configure"]
-STYLED_ACTIONS = ["installed", "removed", "upgraded", "configured"]
-OPPOSITES = {"installed": "purge", "removed": ["install", "-y"], "upgraded": "revert"}
-STYLED_OPPOSITES = ["removed", "installed", "reverted"]
+APT_ACTIONS = ["install", "remove", "upgrade"]
+JANKY_KEYS = ["start-date", "end-date", "requested-by"]
 
 class History:
     def __init__(self):
@@ -42,65 +40,20 @@ class History:
         statuses = {}
         job_id = 0
         apt_data = self._find_sources(APT_LOGDIR, "history.log")
-        self.dpkg_records = [ record.decode("utf8").split() for record in self._find_sources(DPKG_LOGDIR, "dpkg.log") ]
         for item in apt_data:
             item = item.decode('utf8').rstrip('\n')
             if item == "":
                 job_id+=1
                 self.jobs[job_id] = {}
-                self.jobs[job_id]["data"] = []
+                self.jobs[job_id]["actions"] = {}
                 continue
-            elif item.split(":")[0] == "Start-Date" or item.split(":")[0] == "End-Date":
-                self.jobs[job_id][item.split(":")[0].lower().replace("-","_")] = item.replace(item.split(":")[0] + ": ",'').replace("  "," ")
+            elif item.split(":")[0].lower() in JANKY_KEYS:
+                self.jobs[job_id][item.split(":")[0].lower().replace("-","_")] = item.replace(item.split(":")[0] + ": ",'').replace("  ", " ")
+            elif item.split(":")[0].lower() in APT_ACTIONS:
+                if item.split(":")[0].lower() not in self.jobs[job_id]["actions"].keys():
+                    self.jobs[job_id]["actions"][item.split(":")[0].lower()] = item.replace(item.split(":")[0] + ": ", '')
             else:
                 self.jobs[job_id][item.split(":")[0].lower()] = item.replace(item.split(":")[0] + ": ",'')
-        self._interpolate_dpkg(job_id)
-        PP.pprint(self.jobs)
-
-    def _interpolate_dpkg(self, job_id):
-        start = datetime.datetime.fromisoformat(self.jobs[job_id]["start_date"])
-        end = datetime.datetime.fromisoformat(self.jobs[job_id]["end_date"])
-        print(job_id)        
-        for record in self.dpkg_records:
-            cur = datetime.datetime.fromisoformat(" ".join([record[0], record[1]]))
-            if start <= cur <= end:
-                print(record)
-                self.jobs[job_id]['data'].append(record)
-#            # Parse the line without the date and time fields
-#            line = record[2:]
-#            self.jobs[job_id]["raw"].append([d_obj, line])
-#            if line[0] == "upgrade":
-#                if "upgraded" not in self.jobs[job_id]["data"].keys():
-#                    self.jobs[job_id]["data"]["upgraded"] = [
-#                        ["Package Name", "Old Version", "New Version"]
-#                    ]
-#                self.jobs[job_id]["data"]["upgraded"].append(line[1:4])
-#            if line[0] == "remove":
-#                if "removed" not in self.jobs[job_id]["data"].keys():
-#                    self.jobs[job_id]["data"]["removed"] = [["Package Name", "Version"]]
-#                self.jobs[job_id]["data"]["removed"].append(line[1:3])
-#            if line[0] == "configure":
-#                if "configured" not in self.jobs[job_id]["data"].keys():
-#                    self.jobs[job_id]["data"]["configured"] = []
-#                self.jobs[job_id]["data"]["configured"].append(line[1])
-#            if line[0] == "install":
-#                if "installed" not in self.jobs[job_id]["data"].keys():
-#                    self.jobs[job_id]["data"]["installed"] = [
-#                        ["Package Name", "Version"]
-#                    ]
-#                self.jobs[job_id]["data"]["installed"].append([line[1], line[3]])
-#            if line[0] == "status":
-#                if "status" not in self.jobs[job_id]["data"].keys():
-#                    self.jobs[job_id]["data"]["status"] = [
-#                        ["Package Name", "Version", "Status"]
-#                    ]
-#                if line[2].split(":")[0] not in statuses.keys():
-#                    statuses[line[2].split(":")[0]] = {}
-#                    statuses[line[2].split(":")[0]]["version"] = line[3]
-#                statuses[line[2].split(":")[0]]["status"] = line[1]
-#            d_last = d_obj
-#        self.jobs[job_id]["date"]["end"] = d_last
-
     def _find_sources(self, location, fname):
         sources = []
         [ sources.append(logfile) if fname in logfile else "" for logfile in os.listdir(location) ]
@@ -115,16 +68,6 @@ class History:
                     [ raw.append(line) for line in f.readlines() ]
         return(raw)
 
-    def _stuffStatuses(self, job_id, status):
-        [
-            [
-                self.jobs[job_id]["data"]["status"].append(
-                    [key, status[key]["version"], status[key]["status"]]
-                )
-                for key in status.keys()
-            ]
-        ]
-
     def _print_table(self, table):
         # Use tabulate to fancy format output
         headers = table[0]
@@ -135,35 +78,28 @@ class History:
         if show_only != "all":
             no_older = datetime.datetime.now() - datetime.timedelta(days = int(show_only))
 
-        output = [["Job ID", "Start", "Finish"]]
+        output = [["Job ID", "User", "Date", "Actions" ]]
         for job_id in self.jobs.keys():
-            print(self.jobs[job_id]["start_date"])
-            # Make a list for counting jobs
-#            for key in self.jobs[job_id]["data"].keys():
-#                # Look for only the stylized actions we care about (not status)
-#                if key in STYLED_ACTIONS:
-#                    # If the package isn't already in the affected list, put it in there
-#                    for row in self.jobs[job_id]["data"][key]:
-#                        if (
-#                            isinstance(row, list)
-#                            and row[0] != "Package Name"
-#                            and row[0].split(":")[0] not in affected
-#                        ):
-#                            affected.append(row[0].split(":")[0])
-#                        elif not isinstance(row, list):
-#                            affected.append(row)
-#            # Bundle up the output into a nice neat table row and add it to the list
+            job = self.jobs[job_id]
+            if "requested_by" not in job.keys():
+                job["requested_by"] = "system"
             row = [
                 job_id,
-                self.jobs[job_id]['start_date'],
-                self.jobs[job_id]["end_date"],
+                job["requested_by"],
+                job["start_date"],
+                ", ".join(job["actions"].keys()),
             ]
-#
+            
+            # List size logic for show_last / show_all
             if show_only != "all" and datetime.datetime.fromisoformat(self.jobs[job_id]["start_date"]) > no_older:
                 output.append(row)
             elif show_only == "all":
                 output.append(row)
         self._print_table(output)
+
+
+    def showJob(self, job_id):
+        PP.pprint(self.jobs[int(job_id)])
 
 
 def main():
