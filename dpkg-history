@@ -55,13 +55,11 @@ class History:
                 self.jobs[job_id][cur_key.lower().replace("-","_")] = item.replace(cur_key + ": ",'')
             elif cur_key in APT_ACTIONS:
                 if cur_key.lower() not in self.jobs[job_id]["actions"].keys():
-                    #self.jobs[job_id]["actions"][cur_key] = item.replace(cur_key.capitalize() + ": ", '').replace("(", ",").split("),")
                     affected = item.replace(cur_key + ": ", '').replace("(", ",").split("),")
                     self.jobs[job_id]["actions"][cur_key.lower()] = [ package.split(",") for package in affected]
-#                print("\n%s -- %s" % (job_id, cur_key))
-#                print(self.jobs[job_id]["actions"][cur_key])
             else:
-                self.jobs[job_id][item.split(":")[0].lower()] = item.replace(item.split(":")[0] + ": ",'')
+                self.jobs[job_id][cur_key.lower()] = item.replace(cur_key + ": ",'')
+
 
     def _find_sources(self, location, fname):
         sources = []
