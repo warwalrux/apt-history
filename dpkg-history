@@ -16,7 +16,7 @@ import pprint
 # Output table format
 TABLEFORMAT = "github"
 
-# Define DPKG log location
+# Define apt log location
 DPKG_LOGDIR = "/var/log"
 APT_LOGDIR = "/var/log/apt"
 
@@ -119,7 +119,6 @@ def main():
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--list", action="store_true", help="Show dpkg transactions")
     action.add_argument("--info", help="Show transaction report by ID")
-    action.add_argument("--inspect", help="Show detailed transaction data")
     action.add_argument("--redo", help="Redo transaction by ID")
     action.add_argument("--undo", help="Undo transaction by ID")
     action.add_argument(
