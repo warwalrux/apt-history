@@ -139,9 +139,6 @@ def main():
     if args.info:
         history.showJob(args.info)
 
-    if args.inspect:
-        history.inspect(args.inspect)
-
     if args.redo:
         history.redoJob(args.redo)
 
