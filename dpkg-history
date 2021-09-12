@@ -30,7 +30,7 @@ TIME_SENSITIVITY = 45
 PP = pprint.PrettyPrinter(indent=4)
 
 # Some basic lingual definitions for logfile parsing
-APT_ACTIONS = ["install", "remove", "upgrade"]
+APT_ACTIONS = ["install", "remove", "upgrade", "purge"]
 JANKY_KEYS = ["start-date", "end-date", "requested-by"]
 
 class History:
