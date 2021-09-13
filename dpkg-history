@@ -57,7 +57,7 @@ class History:
             elif cur_key in APT_ACTIONS:
                 if cur_key.lower() not in self.jobs[job_id]["actions"].keys():
                     affected = item.replace(cur_key + ": ", '').replace("(", ",").split("),")
-                    self.jobs[job_id]["actions"][cur_key.lower()] = [ package.split(",") for package in affected]
+                    self.jobs[job_id]["actions"][cur_key.lower()] = [ package.replace(")","").split(",") for package in affected]
             else:
                 self.jobs[job_id][cur_key.lower()] = item.replace(cur_key + ": ",'')
 
