@@ -87,7 +87,7 @@ class History:
         for job in self.jobs:
             for action in self.jobs[job]["actions"].keys():
                 for pkg in self.jobs[job]["actions"][action]:
-                    if package in " ".join(pkg):
+                    if package.match(" ".join(pkg)):
                         if action == "upgrade":
                             rows.append([ job, action, pkg[0], " -> ".join(pkg[1:3])])
                         else:
@@ -168,7 +168,8 @@ def main():
         history.showJob(args.info)
     
     if args.find:
-        history.findPackage(args.find)
+        term = re.compile(args.find)
+        history.findPackage(term)
     if args.redo:
         history.redoJob(args.redo)
 
