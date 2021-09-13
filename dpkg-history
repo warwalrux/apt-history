@@ -168,8 +168,9 @@ def main():
         history.showJob(args.info)
     
     if args.find:
-        term = re.compile(args.find)
+        term = re.compile(r"%s"%args.find)
         history.findPackage(term)
+
     if args.redo:
         history.redoJob(args.redo)
 
