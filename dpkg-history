@@ -82,6 +82,66 @@ class History:
         table.pop(0)
         print(tabulate.tabulate(table, headers, tablefmt=TABLEFORMAT))
 
+    def _apt(self, data):
+        """ apt handler function
+        EXAMPLE:
+            self.apt(['install', 'sl', '-y']
+                is equivalent to 
+            ~# apt install sl -y
+        
+        Requires:
+            a list of arguments to follow $(which apt)
+        """
+
+        runcmd = self.aptcmd
+        runcmd.extend(data)
+        s = subprocess.Popen(
+            runcmd, stdout=subprocess.PIPE
+        )
+
+    def _dpkg(self, conf):
+        """ dpkg handler function
+
+        EXAMPLE:
+            self.dpkg({'configure': True, 'pending': True})
+                is equivalent to
+            ~# dpkg --configure --pending
+
+            self.dpkg({'install': "~/Downloads/Minecraft.deb"})
+                is equivalent to
+            ~# dpkg --install ~/Downloads/Minecraft.deb
+
+         Requires:
+            A dict whose keys are arguments that represent their
+            value or presence. Keys set to True will be presented
+            as `--key`. 
+         """
+         
+        run_args_list = [
+            ["--" + key, conf[key]]
+            for key in conf.keys()
+                if key not in self.unacceptable_tags
+                and conf[key] is not None
+                and conf[key] is not True
+                and conf[key] is not False
+            ]
+        run_args_flags = [
+            ["--" + key, conf[key]]
+            for key in conf.keys()
+                if key not in self.unacceptable_tags and conf[key] is True
+            ]
+
+        run_args = [arg for args_pair in run_args_list for arg in args_pair]
+        run_flags = [arg[0] for arg in run_args_flags]
+
+        # construct the command string
+        runcmd = self.dpkgcmd
+        runcmd.extend(run_args)
+        runcmd.extend(run_flags)
+
+        s = subprocess.Popen(runcmd, stdout=subprocess.PIPE)
+        print(s.communicate()[0].decode("utf8"))
+            
     def findPackage(self, package):
         rows = [["Job ID", "Action", "Package", "Version" ]]
         for job in self.jobs:
@@ -136,72 +196,6 @@ Invocation:\t{{ invocation }}
             print(action.capitalize())
             for package in job["actions"][action]:
                 print("  * " + package[0].lstrip())
-
-class PackageManager:
-    def __init__(self):
-        self.aptcmd = [ shutil.which("apt") ]
-        self.dpkgcmd = [ shutil.which("dpkg") ]
-
-        # boilerplate logic to fold a dict into a list of bash appropriate arguments to supply to self.command.
-    def apt(self, data):
-        """ apt handler function
-        EXAMPLE:
-            self.apt(['install', 'sl', '-y']
-                is equivalent to 
-            ~# apt install sl -y
-        
-        Requires:
-            a list of arguments to follow $(which apt)
-        """
-
-        runcmd = self.aptcmd
-        runcmd.extend(data)
-        s = subprocess.Popen(
-            runcmd, stdout=subprocess.PIPE
-        )
-
-    def dpkg(self, conf):
-        """ dpkg handler function
-
-        EXAMPLE:
-            self.dpkg({'configure': True, 'pending': True})
-                is equivalent to
-            ~# dpkg --configure --pending
-
-            self.dpkg({'install': "~/Downloads/Minecraft.deb"})
-                is equivalent to
-            ~# dpkg --install ~/Downloads/Minecraft.deb
-
-         Requires:
-            A dict whose keys are arguments that represent their
-            value or presence. Keys set to True will be presented
-            as `--key`. 
-         """
-         
-        run_args_list = [
-            ["--" + key, conf[key]]
-            for key in conf.keys()
-                if key not in self.unacceptable_tags
-                and conf[key] is not None
-                and conf[key] is not True
-                and conf[key] is not False
-            ]
-        run_args_flags = [
-            ["--" + key, conf[key]]
-            for key in conf.keys()
-                if key not in self.unacceptable_tags and conf[key] is True
-            ]
-
-        run_args = [arg for args_pair in run_args_list for arg in args_pair]
-        run_flags = [arg[0] for arg in run_args_flags]
-
-        # construct the command string
-        runcmd = self.dpkgcmd
-        runcmd.extend(run_args)
-        runcmd.extend(run_flags)
-
-        s = subprocess.Popen(runcmd, stdout=subprocess.PIPE)
-        print(s.communicate()[0].decode("utf8"))
 
 def main():
     parser = argparse.ArgumentParser()
