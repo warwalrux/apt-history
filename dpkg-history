@@ -33,10 +33,13 @@ PP = pprint.PrettyPrinter(indent=4)
 # Some basic lingual definitions for logfile parsing
 APT_ACTIONS = ["Install", "Remove", "Upgrade", "Purge"]
 JANKY_KEYS = ["Start-Date", "End-Date", "Requested-By"]
+APT_OPPOSITES = { 'install': "purge", 'upgrade': ["install", "-y"], 'purge': ["install", "-y"], 'remove': ["install", "-y"] }
 
 class History:
     def __init__(self):
         # Build a jobs object based on apts history.log
+        self.aptcmd = shutil.which('apt-get')
+        self.dpkgcmd = shutil.which('dpkg')
         self.jobs = {}
         statuses = {}
         job_id = 0
@@ -196,6 +199,20 @@ Invocation:\t{{ invocation }}
             print(action.capitalize())
             for package in job["actions"][action]:
                 print("  * " + package[0].lstrip())
+
+    def undoJob(self, job_id):
+        job = self.jobs[int(job_id)]
+        for action in job["actions"]:
+            if action in APT_OPPOSITES.keys():
+                affected = [ package[0] for package in job["actions"][action] ]
+                if "linux-" in " ".join(affected):
+                    print("Unable to preform undo operations on kernel packages at this time")
+                    sys.exit()
+                print(self.aptcmd, APT_OPPOSITES[action], " ".join(affected))
+
+    def redoJob(self, job_id):
+        job = self.jobs[int(job_id)]
+        PP.pprint(job)
 
 def main():
     parser = argparse.ArgumentParser()
