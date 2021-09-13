@@ -83,13 +83,13 @@ class History:
         print(tabulate.tabulate(table, headers, tablefmt=TABLEFORMAT))
 
     def findPackage(self, package):
-        data = {}
+        rows = [["Job ID", "Action", "Package" ]]
         for job in self.jobs:
             for action in self.jobs[job]["actions"].keys():
                 for pkg in self.jobs[job]["actions"][action]:
                     if package in " ".join(pkg):
-                        data[job] = self.jobs[job]
-        PP.pprint(data)
+                        rows.append([ job, action, package ])
+        self._print_table(rows)
 
     def listJobs(self, show_only):
         if show_only != "all":
