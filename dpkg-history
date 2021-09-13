@@ -82,6 +82,15 @@ class History:
         table.pop(0)
         print(tabulate.tabulate(table, headers, tablefmt=TABLEFORMAT))
 
+    def findPackage(self, package):
+        data = {}
+        for job in self.jobs:
+            for action in self.jobs[job]["actions"].keys():
+                for pkg in self.jobs[job]["actions"][action]:
+                    if package in " ".join(pkg):
+                        data[job] = self.jobs[job]
+        PP.pprint(data)
+
     def listJobs(self, show_only):
         if show_only != "all":
             no_older = datetime.datetime.now() - datetime.timedelta(days = int(show_only))
@@ -153,7 +162,9 @@ def main():
 
     if args.info:
         history.showJob(args.info)
-
+    
+    if args.find:
+        history.findPackage(args.find)
     if args.redo:
         history.redoJob(args.redo)
 
