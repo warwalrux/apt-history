@@ -83,12 +83,16 @@ class History:
         print(tabulate.tabulate(table, headers, tablefmt=TABLEFORMAT))
 
     def findPackage(self, package):
-        rows = [["Job ID", "Action", "Package" ]]
+        rows = [["Job ID", "Action", "Package", "Version" ]]
         for job in self.jobs:
             for action in self.jobs[job]["actions"].keys():
                 for pkg in self.jobs[job]["actions"][action]:
                     if package in " ".join(pkg):
-                        rows.append([ job, action, package ])
+                        if action == "upgrade":
+                            rows.append([ job, action, pkg[0], " -> ".join(pkg[1:3])])
+                        else:
+                            rows.append([ job, action, pkg[0], pkg[1]])
+                        break
         self._print_table(rows)
 
     def listJobs(self, show_only):
