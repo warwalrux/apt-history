@@ -115,10 +115,10 @@ class History:
 Start Date:\t{{ start_date }}
 End Date:\t{{ end_date }}
 User:\t\t{{ user }}
+Invocation:\t{{ invocation }}
 """
-
         j = jinja2.Template(string)
-        print(j.render(job_id=job_id,start_date=job["start_date"],end_date=job["end_date"],user=job["requested_by"]))
+        print(j.render(job_id=job_id,start_date=job["start_date"],end_date=job["end_date"],user=job["requested_by"],invocation=job["commandline"]))
         for action in job["actions"].keys():
             print(action.capitalize())
             for package in job["actions"][action]:
