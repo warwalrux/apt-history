@@ -57,7 +57,7 @@ class History:
             elif cur_key in APT_ACTIONS:
                 if cur_key.lower() not in self.jobs[job_id]["actions"].keys():
                     affected = item.replace(cur_key + ": ", '').replace("(", ",").split("),")
-                    self.jobs[job_id]["actions"][cur_key.lower()] = [ package.split(",") for package in affected]
+                    self.jobs[job_id]["actions"][cur_key.lower()] = [ package.replace(")","").split(",") for package in affected]
             else:
                 self.jobs[job_id][cur_key.lower()] = item.replace(cur_key + ": ",'')
 
@@ -81,6 +81,19 @@ class History:
         headers = table[0]
         table.pop(0)
         print(tabulate.tabulate(table, headers, tablefmt=TABLEFORMAT))
+
+    def findPackage(self, package):
+        rows = [["Job ID", "Action", "Package", "Version" ]]
+        for job in self.jobs:
+            for action in self.jobs[job]["actions"].keys():
+                for pkg in self.jobs[job]["actions"][action]:
+                    if package.search(" ".join(pkg)):
+                        if action == "upgrade":
+                            rows.append([ job, action, pkg[0], " -> ".join(pkg[1:3])])
+                        else:
+                            rows.append([ job, action, pkg[0], pkg[1]])
+                        break
+        self._print_table(rows)
 
     def listJobs(self, show_only):
         if show_only != "all":
@@ -153,6 +166,10 @@ def main():
 
     if args.info:
         history.showJob(args.info)
+    
+    if args.find:
+        term = re.compile(r"%s"%args.find, re.IGNORECASE | re.MULTILINE)
+        history.findPackage(term)
 
     if args.redo:
         history.redoJob(args.redo)
