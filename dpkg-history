@@ -198,6 +198,11 @@ Invocation:\t{{ invocation }}
         for action in job["actions"].keys():
             print(action.capitalize())
             for package in job["actions"][action]:
+#                if action == "upgrade":
+#                    print("  * %s\t(%s -> %s)"%(package[0].strip(), package[1].strip(), package[2].strip()))
+#                elif action == "install":
+#                    print("  * %s\t(%s)"%(package[0].strip(),package[1].strip()))
+#                else:
                 print("  * " + package[0].lstrip())
 
     def undoJob(self, job_id):
