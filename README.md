@@ -9,8 +9,9 @@ Proposed as a debian equivalent to [`yum-history`](https://access.redhat.com/doc
 
 ## Usage
 
-usage: dpkg-history [-h] [--debug] [ --list | --info ID | --inspect ID | --redo ID | --undo ID ]
+##### **dpkg-history** [-h] [--debug] [ --list | --info _ID_ | --inspect _ID_ | --redo _ID_ | --undo _ID_ ]
 
+```
 optional arguments:
   -h, --help         show this help message and exit
   --debug            debug switch
@@ -19,10 +20,10 @@ optional arguments:
   --inspect INSPECT  Show detailed transaction data
   --redo REDO        Redo transaction by ID
   --undo UNDO        Undo transaction by ID
+```
 
 ## Installation
 
 For now the entire repo can be extracted into `/usr/share/lib`.
 the `dpkg-history` executable can be symbolically linked from
 `/usr/share/lib` to `/usr/bin` and then used globally.
-
