@@ -135,8 +135,11 @@ Invocation:\t{{ invocation }}
         for action in job["actions"].keys():
             print("%s:\n"%action.capitalize())
             packages = [ pkg[0] for pkg in job["actions"][action] ]
-            if len(packages) >= 35:
+            if len(packages) >= 30:
                 packages = [ packages[x:x+5] for x in range(0, len(packages), 5) ]
+                self._print_table(packages, "plain")
+            elif len(packages) <=29 and len(packages) >= 7:
+                packages = [ packages[x:x+3] for x in range(0, len(packages), 3) ]
                 self._print_table(packages, "plain")
             else:
                 for package in packages:
