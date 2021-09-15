@@ -213,12 +213,14 @@ Invocation:\t{{ invocation }}
                     print("Unable to preform undo operations on kernel packages at this time")
                     sys.exit()
                 elif action == "install":
-                    print(self.aptcmd, APT_OPPOSITES[action], " ".join([ package[0] for package in job["actions"][action] ]))
+                    args = [APT_OPPOSITES[action], " ".join([ package[0] for package in job["actions"][action] ])]
+                    print(self.aptcmd, " ".join(args))
                 elif action == "upgrade":
-#                    print([ package for package in job["actions"][action] ])
-                    print(self.aptcmd, APT_OPPOSITES[action][0], " ".join([ "=".join([package[0].strip(), package[1].strip()]) for package in job["actions"][action]]), APT_OPPOSITES[action][1])
+                    args = [APT_OPPOSITES[action][0], " ".join([ "=".join([package[0].strip(), package[1].strip()]) for package in job["actions"][action]]), APT_OPPOSITES[action][1]]
+                    print(self.aptcmd, " ".join(args))
                 elif action == "purge" or action == "remove":
-                    print(self.aptcmd, APT_OPPOSITES[action][0], " ".join([ "=".join([package[0].strip(), package[1].strip()]) for package in job["actions"][action]]), APT_OPPOSITES[action][1])
+                    args = [APT_OPPOSITES[action][0], " ".join([ "=".join([package[0].strip(), package[1].strip()]) for package in job["actions"][action]]), APT_OPPOSITES[action][1]]
+                    print(self.aptcmd, " ".join(args))
                     
 
     def redoJob(self, job_id):
