@@ -76,11 +76,11 @@ class History:
                     [ raw.append(line) for line in f.readlines() ]
         return(raw)
 
-    def _print_table(self, table):
+    def _print_table(self, table, fmt=TABLEFORMAT):
         # Use tabulate to fancy format output
         headers = table[0]
         table.pop(0)
-        print(tabulate.tabulate(table, headers, tablefmt=TABLEFORMAT))
+        print(tabulate.tabulate(table, headers, tablefmt=fmt))
 
     def findPackage(self, package):
         rows = [["Job ID","Date" "Action", "Package", "Version" ]]
@@ -133,9 +133,17 @@ Invocation:\t{{ invocation }}
         j = jinja2.Template(string)
         print(j.render(job_id=job_id,start_date=job["start_date"],end_date=job["end_date"],user=job["requested_by"],invocation=job["commandline"]))
         for action in job["actions"].keys():
-            print(action.capitalize())
-            for package in job["actions"][action]:
-                print("  * " + package[0].lstrip())
+            print("%s:\n"%action.capitalize())
+            packages = [ pkg[0] for pkg in job["actions"][action] ]
+            if len(packages) >= 30:
+                packages = [ packages[x:x+5] for x in range(0, len(packages), 5) ]
+                self._print_table(packages, "plain")
+            elif len(packages) <=29 and len(packages) >= 7:
+                packages = [ packages[x:x+3] for x in range(0, len(packages), 3) ]
+                self._print_table(packages, "plain")
+            else:
+                for package in packages:
+                    print(package)
 
 class PackageManager:
     def __init__(self):
