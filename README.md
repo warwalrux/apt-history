@@ -5,7 +5,7 @@ _maintained by Warwalrux_
 
 Proposed as a debian equivalent to [`yum-history`](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/6/html/deployment_guide/sec-yum-transaction_history), `dpkg-history` is capable of browsing through a transactional view of package maintenance history, as documented by dpkg.
 
-![Basic Usage](https://github.com/warwalrux/dpkg-history/raw/main/doc/screenshots/1.png)
+![Basic Usage](https://github.com/warwalrux/apt-history/raw/main/doc/screenshots/1.png)
 
 ## Usage
 

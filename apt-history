@@ -147,8 +147,8 @@ Invocation:\t{{ invocation }}
 
 class PackageManager:
     def __init__(self):
+        self.dpkgcmd = [ shutil.which("dpkg") ]
         self.aptcmd = [ shutil.which("apt") ]
-        self.aptcmd = [ shutil.which("dpkg") ]
 
         # boilerplate logic to fold a dict into a list of bash appropriate arguments to supply to self.command.
     def apt(self, data):
@@ -168,17 +168,17 @@ class PackageManager:
             runcmd, stdout=subprocess.PIPE
         )
 
-    def apt(self, conf):
+    def dpkg(self, conf):
         """ apt handler function
 
         EXAMPLE:
-            self.apt({'configure': True, 'pending': True})
+            self.dpkg({'configure': True, 'pending': True})
                 is equivalent to
-            ~# apt --configure --pending
+            ~# dpkg --configure --pending
 
-            self.apt({'install': "~/Downloads/Minecraft.deb"})
+            self.dpkg({'install': "~/Downloads/Minecraft.deb"})
                 is equivalent to
-            ~# apt --install ~/Downloads/Minecraft.deb
+            ~# dpkg --install ~/Downloads/Minecraft.deb
 
          Requires:
             A dict whose keys are arguments that represent their
@@ -204,7 +204,7 @@ class PackageManager:
         run_flags = [arg[0] for arg in run_args_flags]
 
         # construct the command string
-        runcmd = self.aptcmd
+        runcmd = self.dpkgcmd
         runcmd.extend(run_args)
         runcmd.extend(run_flags)
 
