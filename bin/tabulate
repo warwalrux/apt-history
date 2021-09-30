@@ -1,4 +1,4 @@
-#!/home/dfoulks/projects/dpkg-history/bin/python
+#!/home/dfoulks/projects/apt-history/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

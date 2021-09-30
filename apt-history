@@ -40,7 +40,7 @@ class History:
         self.jobs = {}
         statuses = {}
         job_id = 0
-        apt_data = self._find_sources(APT_LOGDIR, "history.log")
+        apt_data = self.__find_sources(APT_LOGDIR, "history.log")
         for item in apt_data:
             item = item.decode('utf8').rstrip('\n')
             if item == "":
@@ -62,7 +62,7 @@ class History:
                 self.jobs[job_id][cur_key.lower()] = item.replace(cur_key + ": ",'')
 
 
-    def _find_sources(self, location, fname):
+    def __find_sources(self, location, fname):
         sources = []
         [ sources.append(logfile) if fname in logfile else "" for logfile in os.listdir(location) ]
         sources.sort(reverse=True)
@@ -76,7 +76,7 @@ class History:
                     [ raw.append(line) for line in f.readlines() ]
         return(raw)
 
-    def _print_table(self, table, fmt=TABLEFORMAT):
+    def __print_table(self, table, fmt=TABLEFORMAT):
         # Use tabulate to fancy format output
         headers = table[0]
         table.pop(0)
@@ -93,7 +93,7 @@ class History:
                         else:
                             rows.append([ job, self.jobs[job]['start_date'], action, pkg[0], pkg[1]])
                         break
-        self._print_table(rows)
+        self.__print_table(rows)
 
     def listJobs(self, show_only):
         if show_only != "all":
@@ -117,7 +117,7 @@ class History:
                 output.append(row)
             elif show_only == "all":
                 output.append(row)
-        self._print_table(output)
+        self.__print_table(output)
 
 
     def showJob(self, job_id):
@@ -137,10 +137,10 @@ Invocation:\t{{ invocation }}
             packages = [ pkg[0] for pkg in job["actions"][action] ]
             if len(packages) >= 30:
                 packages = [ packages[x:x+5] for x in range(0, len(packages), 5) ]
-                self._print_table(packages, "plain")
+                self.__print_table(packages, "plain")
             elif len(packages) <=29 and len(packages) >= 7:
                 packages = [ packages[x:x+3] for x in range(0, len(packages), 3) ]
-                self._print_table(packages, "plain")
+                self.__print_table(packages, "plain")
             else:
                 for package in packages:
                     print(package)
@@ -148,7 +148,7 @@ Invocation:\t{{ invocation }}
 class PackageManager:
     def __init__(self):
         self.aptcmd = [ shutil.which("apt") ]
-        self.dpkgcmd = [ shutil.which("dpkg") ]
+        self.aptcmd = [ shutil.which("dpkg") ]
 
         # boilerplate logic to fold a dict into a list of bash appropriate arguments to supply to self.command.
     def apt(self, data):
@@ -168,17 +168,17 @@ class PackageManager:
             runcmd, stdout=subprocess.PIPE
         )
 
-    def dpkg(self, conf):
-        """ dpkg handler function
+    def apt(self, conf):
+        """ apt handler function
 
         EXAMPLE:
-            self.dpkg({'configure': True, 'pending': True})
+            self.apt({'configure': True, 'pending': True})
                 is equivalent to
-            ~# dpkg --configure --pending
+            ~# apt --configure --pending
 
-            self.dpkg({'install': "~/Downloads/Minecraft.deb"})
+            self.apt({'install': "~/Downloads/Minecraft.deb"})
                 is equivalent to
-            ~# dpkg --install ~/Downloads/Minecraft.deb
+            ~# apt --install ~/Downloads/Minecraft.deb
 
          Requires:
             A dict whose keys are arguments that represent their
@@ -204,7 +204,7 @@ class PackageManager:
         run_flags = [arg[0] for arg in run_args_flags]
 
         # construct the command string
-        runcmd = self.dpkgcmd
+        runcmd = self.aptcmd
         runcmd.extend(run_args)
         runcmd.extend(run_flags)
 
@@ -218,7 +218,7 @@ def main():
     show.add_argument("--show-last", help="Show last <num> days of transactions")
     show.add_argument("--show-all", action="store_true", help="Show last <num> days of transactions")
     action = parser.add_mutually_exclusive_group()
-    action.add_argument("--list", action="store_true", help="Show dpkg transactions")
+    action.add_argument("--list", action="store_true", help="Show apt transactions")
     action.add_argument("--info", help="Show transaction report by ID")
     action.add_argument("--redo", help="Redo transaction by ID")
     action.add_argument("--undo", help="Undo transaction by ID")
