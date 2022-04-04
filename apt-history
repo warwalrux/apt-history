@@ -219,7 +219,7 @@ def main():
     show.add_argument("--show-last", help="Show last <num> days of transactions")
     show.add_argument("--show-all", action="store_true", help="Show last <num> days of transactions")
     action = parser.add_mutually_exclusive_group()
-    action.add_argument("--list", action="store_true", default=True, help="Show apt transactions")
+    action.add_argument("--list", action="store_true", help="Show apt transactions")
     action.add_argument("--info", help="Show transaction report by ID")
     action.add_argument("--redo", help="Redo transaction by ID")
     action.add_argument("--undo", help="Undo transaction by ID")

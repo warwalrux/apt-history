@@ -10,20 +10,14 @@ import re
 url = "https://cve.circl.lu/api/last"
 pp = pprint.PrettyPrinter()
 
-def scanPkgs(args):
-    
+def genPkgIndex():
     # Fetch all packages installed on this system
     print("Building Package Index...")
-    pkgs = subprocess.check_output(["dpkg-query", "-W", "-f=${Package}:${Version}\n"]).decode('utf-8').strip().split('\n')
+    return subprocess.check_output(["dpkg-query", "-W", "-f=${Package}:${Version}\n"]).decode('utf-8').strip().split('\n')
+
+def next():
     search_terms = []
-    
-    if not args.id:
-        print("Fetching latest vulnerabilities...")
-        vulns = requests.get("https://cve.circl.lu/api/last")
-    
-    else:
-        print("Fetching Vulneratility: %s" % args.id)
-        vulns = requests.get("https://cve.circl.lu/api/cve/%s"%(args.id))
+   
 
     CVE_LIST = json.loads(vulns.content.decode('utf-8'))
     FOUND = []
@@ -55,6 +49,13 @@ def scanPkgs(args):
 #            if vstr in pkgs:
 #                print("DETECTED!")
 
+def scanCVE(index, vuln):
+    pp.pprint(index)
+    for package in vuln["vulnerable_product"]:
+        p = package.split(":")
+        pkg = re.compile(p[4] + "*")
+        affected = list(filter(pkg.match, index))
+        print(affected)
 
 
 if __name__ == "__main__":
@@ -62,4 +63,14 @@ if __name__ == "__main__":
     parser.add_argument('-v', '--verbose', action="store_true", help="Verbose")
     parser.add_argument('--id', help="Evaluate for a specific CVE")
     args = parser.parse_args()
-    scanPkgs(args)
+    
+    index = genPkgIndex()
+
+    if not args.id:
+        print("Fetching latest vulnerabilities...")
+        vulns = requests.get("https://cve.circl.lu/api/last")
+    
+    else:
+        print("Fetching Vulneratility: %s" % args.id)
+        vuln = json.loads(requests.get("https://cve.circl.lu/api/cve/%s"%(args.id)).content.decode('utf-8'))
+        scanCVE(index, vuln)
