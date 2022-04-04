@@ -1,23 +1,18 @@
 #!/usr/bin/python3
 
 import argparse
-import requests
-import json
-import pprint
-import subprocess
-import re
-import logging
 import jinja2
+import json
+import logging
+import re
+import requests
+import subprocess
 
 logging.basicConfig(level=logging.ERROR)
 
+# Templates
 CVEURL = "https://cve.mitre.org/cgi-bin/cvename.cgi?name=%s"
-url = "https://cve.circl.lu/api/last"
-pp = pprint.PrettyPrinter()
-result = {}
-
-
-output = jinja2.Template("""{%- for vuln in results -%}
+OUTPUT = jinja2.Template("""{%- for vuln in results -%}
 {{ results[vuln]["cve"]["id"] }} -- {{ results[vuln]["status"] }}
 {% if results[vuln]["status"] == "Failed" %}    Summary: {{ results[vuln]["cve"]["summary"] }}
     URL: {{ results["url"] }}
@@ -27,12 +22,16 @@ output = jinja2.Template("""{%- for vuln in results -%}
 {%- endif -%}
 {%- endfor -%}""")
 
+URL = { "LAST": "https://cve.circl.lu/api/last", "BY_ID": "https://cve.circl.lu/api/cve/%s" } 
+RESULT = {}
+
 def genPkgIndex():
     # Fetch all packages installed on this system
     logging.info("Building Package Index...")
     return subprocess.check_output(["dpkg-query", "-W", "-f=${Package}:${Version}\n"]).decode('utf-8').strip().split('\n')
 
-def scanCVE(index, vuln, verbose):
+def scanCVE(index, vuln):
+    # Scan the index for package + versions mentioned in the CVE provided
     logging.info("Scanning for %s" % (vuln["id"]))
     affected_packages = []
     for package in vuln["vulnerable_product"]:
@@ -44,17 +43,19 @@ def scanCVE(index, vuln, verbose):
                 if item not in affected_packages:
                     logging.debug("CVE detected!")
                     affected_packages.append(item)
+
+    # Append results, if any, to RESULT
     if len(affected_packages) > 0:
-        result[vuln["id"]] = {"status": "Failed", "packages": affected_packages, "url": CVEURL % vuln["id"]}
+        RESULT[vuln["id"]] = {"status": "Failed", "packages": affected_packages, "url": CVEURL % vuln["id"], "cve": vuln}
     else:
-        result[vuln["id"]] = {"status": "Passed", "url": CVEURL % vuln["id"]}
-    
-    if verbose:
-        result[vuln["id"]]["cve"] = vuln
+        RESULT[vuln["id"]] = {"status": "Passed", "url": CVEURL % vuln["id"], "cve": vuln}
 
 def showCVE(vuln):
+    # Dump Vulnerability data
+    # TODO: Maybe provide a way to generate jinja2 reports on CVEs from file.
     j = jinja2.Template("""{{ vuln["id"] }}: {{ vuln["summary"] }}
     """)
+
     print(j.render(vuln=vuln))
 
 if __name__ == "__main__":
@@ -67,20 +68,19 @@ if __name__ == "__main__":
 
     if not args.id:
         logging.info("Fetching latest vulnerabilities...")
-        vulns = json.loads(requests.get("https://cve.circl.lu/api/last").content.decode('utf-8'))
+        vulns = json.loads(requests.get(URL["LAST"]).content.decode('utf-8'))
         for vuln in vulns:
             if args.show:
                 showCVE(vuln)
             else:
-                scanCVE(index, vuln, True)
+                scanCVE(index, vuln)
     else:
         logging.info("Fetching Vulneratility: %s" % args.id)
-        vuln = json.loads(requests.get("https://cve.circl.lu/api/cve/%s"%(args.id)).content.decode('utf-8'))
+        vuln = json.loads(requests.get(URL["BY_ID"]%(args.id)).content.decode('utf-8'))
         if args.show:
             showCVE(vuln)
         else:
-            scanCVE(index, vuln, True)
+            scanCVE(index, vuln)
 
     if not args.show:
-#        pp.pprint(result)
-        print(output.render(results=result))
+        print(OUTPUT.render(results=RESULT))
