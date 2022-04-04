@@ -5,14 +5,23 @@ import requests
 import json
 import pprint
 import subprocess
+import re
 
 url = "https://cve.circl.lu/api/last"
 pp = pprint.PrettyPrinter()
 
 def scanPkgs(args):
+    
+    pkgs = subprocess.check_output(["dpkg-query", "-W", "-f=${Package}:${Version}\n"]).decode('utf-8').strip().split('\n')
     recent_vulns = requests.get("https://cve.circl.lu/api/last")
-    pkgs = [ pkg.split('\t') for pkg in subprocess.check_output(["dpkg-query", "-W"]).decode('utf-8').strip().split('\n') ]
-    pp.pprint(json.loads(recent_vulns.content.decode('utf-8')))
+    CVE_LIST = json.loads(recent_vulns.content.decode('utf-8'))
+    search_terms = []
+    for CVE in CVE_LIST:
+        search_terms.extend(CVE['vulnerable_configuration'])
+
+    for term in search_terms:
+        if term in pkgs:
+            print("FOUND ONE!")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scan system for CVE affected Packages")
