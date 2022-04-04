@@ -36,18 +36,22 @@ def scanPkgs(args):
                     print("DETECTED!")
 
     elif isinstance(CVE_LIST, dict):
+        ID = CVE_LIST["id"]
         print("Checking %s..."%CVE_LIST["id"])
         for vuln in CVE_LIST["vulnerable_product"]:
             v = vuln.split(":")
             pkg = re.compile(v[4] + "*")
             apkgs = list(filter(pkg.match, pkgs))
             if len(apkgs) > 0:
-                ver = re.compile(v[5] + "*")
-                results = list(filter(ver.match, apkgs))
-                print(results)
-                if len(results) > 0:
-                    FOUND.append({"CVE": CVE_LIST["id"], "FOUND": results })
-        pp.pprint(FOUND)
+                ver = re.compile(":" + v[5] + "*")
+                for item in apkgs:
+                    if ":" + v[5] in item:
+                        detected = True
+                        FOUND.append(item)
+
+    print("Offending Packages:")
+    pp.pprint(FOUND)
+
 #            if vstr in pkgs:
 #                print("DETECTED!")
 
