@@ -15,21 +15,44 @@ def scanPkgs(args):
     # Fetch all packages installed on this system
     print("Building Package Index...")
     pkgs = subprocess.check_output(["dpkg-query", "-W", "-f=${Package}:${Version}\n"]).decode('utf-8').strip().split('\n')
-    
     search_terms = []
     
-    print("Fetching latest vulnerabilities...")
-    recent_vulns = requests.get("https://cve.circl.lu/api/last")
-    CVE_LIST = json.loads(recent_vulns.content.decode('utf-8'))
+    if not args.id:
+        print("Fetching latest vulnerabilities...")
+        vulns = requests.get("https://cve.circl.lu/api/last")
+    
+    else:
+        print("Fetching Vulneratility: %s" % args.id)
+        vulns = requests.get("https://cve.circl.lu/api/cve/%s"%(args.id))
 
-    for CVE in CVE_LIST:
-        print("Checking %s..."%CVE["id"])
-        for vuln in CVE["vulnerable_configuration"]:
-            if vuln in pkgs:
-                print("FOUND ONE!")
+    CVE_LIST = json.loads(vulns.content.decode('utf-8'))
+
+    if isinstance(CVE_LIST, list):
+        for CVE in CVE_LIST:
+            print("Checking %s..."%CVE["id"])
+            for vuln in CVE["vulnerable_configuration"]:
+                if vuln in pkgs:
+                    print("DETECTED!")
+
+    elif isinstance(CVE_LIST, dict):
+        print("Checking %s..."%CVE_LIST["id"])
+        for vuln in CVE_LIST["vulnerable_product"]:
+            v = vuln.split(":")
+            r = re.compile(v[4] + "*")
+            apkgs = list(filter(r.match, pkgs))
+
+            r = re.compile(v[5] + "*")
+            result = list(filter(r.match, apkgs))
+
+            print(result)
+#            if vstr in pkgs:
+#                print("DETECTED!")
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scan system for CVE affected Packages")
     parser.add_argument('-v', '--verbose', action="store_true", help="Verbose")
+    parser.add_argument('--id', help="Evaluate for a specific CVE")
     args = parser.parse_args()
     scanPkgs(args)
