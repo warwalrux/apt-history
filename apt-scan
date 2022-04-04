@@ -12,16 +12,21 @@ pp = pprint.PrettyPrinter()
 
 def scanPkgs(args):
     
+    # Fetch all packages installed on this system
+    print("Building Package Index...")
     pkgs = subprocess.check_output(["dpkg-query", "-W", "-f=${Package}:${Version}\n"]).decode('utf-8').strip().split('\n')
+    
+    search_terms = []
+    
+    print("Fetching latest vulnerabilities...")
     recent_vulns = requests.get("https://cve.circl.lu/api/last")
     CVE_LIST = json.loads(recent_vulns.content.decode('utf-8'))
-    search_terms = []
-    for CVE in CVE_LIST:
-        search_terms.extend(CVE['vulnerable_configuration'])
 
-    for term in search_terms:
-        if term in pkgs:
-            print("FOUND ONE!")
+    for CVE in CVE_LIST:
+        print("Checking %s..."%CVE["id"])
+        for vuln in CVE["vulnerable_configuration"]:
+            if vuln in pkgs:
+                print("FOUND ONE!")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scan system for CVE affected Packages")
