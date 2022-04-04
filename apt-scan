@@ -22,8 +22,7 @@ output = jinja2.Template("""{%- for vuln in results -%}
 {% if results[vuln]["status"] == "Failed" %}    Summary: {{ results[vuln]["cve"]["summary"] }}
     URL: {{ results["url"] }}
     Affected Packages:{% for pkg in results[vuln]["packages"] %}
-        - {{ pkg }}
-        {%- endfor -%}
+        - {{ pkg }}{% endfor %}
 {% else %}
 {%- endif -%}
 {%- endfor -%}""")
