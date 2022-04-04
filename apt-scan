@@ -51,11 +51,14 @@ def next():
 
 def scanCVE(index, vuln):
     pp.pprint(index)
+    affected_packages = []
     for package in vuln["vulnerable_product"]:
         p = package.split(":")
         pkg = re.compile(p[4] + "*")
-        affected = list(filter(pkg.match, index))
-        print(affected)
+        for item in list(filter(pkg.match, index)):
+            if item not in affected_packages:
+                affected_packages.extend(item)
+    print(affected_pacakges)
 
 
 if __name__ == "__main__":
