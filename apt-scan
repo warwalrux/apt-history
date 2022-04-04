@@ -56,9 +56,10 @@ def scanCVE(index, vuln):
         p = package.split(":")
         pkg = re.compile(p[4] + "*")
         for item in list(filter(pkg.match, index)):
-            if item not in affected_packages:
-                affected_packages.extend(item)
-    print(affected_pacakges)
+            print(item)
+#            if item not in affected_packages:
+#                affected_packages.extend(item)
+#    print(affected_pacakges)
 
 
 if __name__ == "__main__":
