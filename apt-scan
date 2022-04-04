@@ -69,7 +69,7 @@ if __name__ == "__main__":
         if args.show:
             showCVE(vuln)
         else:
-            scanCVE(index, vuln, args.verbose)
+            scanCVE(index, vuln, args.details)
 
     if not args.show:
         pp.pprint(result)
