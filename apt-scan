@@ -7,6 +7,7 @@ import pprint
 import subprocess
 import re
 import logging
+import jinja2
 
 logging.basicConfig(level=logging.INFO)
 
@@ -20,7 +21,7 @@ def genPkgIndex():
     logging.debug("Building Package Index...")
     return subprocess.check_output(["dpkg-query", "-W", "-f=${Package}:${Version}\n"]).decode('utf-8').strip().split('\n')
 
-def scanCVE(index, vuln):
+def scanCVE(index, vuln, verbose):
     logging.debug("Scanning for %s" % (vuln["id"]))
     affected_packages = []
     for package in vuln["vulnerable_product"]:
@@ -35,10 +36,18 @@ def scanCVE(index, vuln):
         result[vuln["id"]] = {"status": "Failed", "packages": affected_packages, "url": CVEURL % vuln["id"]}
     else:
         result[vuln["id"]] = {"status": "Passed", "url": CVEURL % vuln["id"]}
+    
+    if verbose:
+        result[vuln["id"]]["cve"] = vuln
+
+def showCVE(vuln):
+    j = jinja2.Template("""{{ vuln["id"] }}: {{ vuln["summary"] }}
+    """)
+    print(j.render(vuln=vuln))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scan system for CVE affected Packages")
-    parser.add_argument('-v', '--verbose', action="store_true", help="Verbose")
+    parser.add_argument('--details', action="store_true", help="Verbose output")
     parser.add_argument('--id', help="Evaluate for a specific CVE")
     parser.add_argument('--show', action='store_true', help="Show CVE Details")
     args = parser.parse_args()
@@ -51,15 +60,16 @@ if __name__ == "__main__":
         vulns = json.loads(requests.get("https://cve.circl.lu/api/last").content.decode('utf-8'))
         for vuln in vulns:
             if args.show:
-                pp.pprint(vuln)
+                showCVE(vuln)
             else:
-                scanCVE(index, vuln)
+                scanCVE(index, vuln, args.verbose)
     else:
         logging.debug("Fetching Vulneratility: %s" % args.id)
         vuln = json.loads(requests.get("https://cve.circl.lu/api/cve/%s"%(args.id)).content.decode('utf-8'))
         if args.show:
-            pp.pprint(vuln)
+            showCVE(vuln)
         else:
-            scanCVE(index, vuln)
+            scanCVE(index, vuln, args.verbose)
 
-    pp.pprint(result)
+    if not args.show:
+        pp.pprint(result)
