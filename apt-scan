@@ -9,55 +9,27 @@ import re
 
 url = "https://cve.circl.lu/api/last"
 pp = pprint.PrettyPrinter()
+result = {}
 
 def genPkgIndex():
     # Fetch all packages installed on this system
     print("Building Package Index...")
     return subprocess.check_output(["dpkg-query", "-W", "-f=${Package}:${Version}\n"]).decode('utf-8').strip().split('\n')
 
-def next():
-    search_terms = []
-   
-
-    CVE_LIST = json.loads(vulns.content.decode('utf-8'))
-    FOUND = []
-
-    if isinstance(CVE_LIST, list):
-        for CVE in CVE_LIST:
-            print("Checking %s..."%CVE["id"])
-            for vuln in CVE["vulnerable_configuration"]:
-                if vuln in pkgs:
-                    print("DETECTED!")
-
-    elif isinstance(CVE_LIST, dict):
-        ID = CVE_LIST["id"]
-        print("Checking %s..."%CVE_LIST["id"])
-        for vuln in CVE_LIST["vulnerable_product"]:
-            v = vuln.split(":")
-            pkg = re.compile(v[4] + "*")
-            apkgs = list(filter(pkg.match, pkgs))
-            if len(apkgs) > 0:
-                ver = re.compile(":" + v[5] + "*")
-                for item in apkgs:
-                    if ":" + v[5] in item:
-                        detected = True
-                        FOUND.append(item)
-
-    print("Offending Packages:")
-    pp.pprint(FOUND)
-
-#            if vstr in pkgs:
-#                print("DETECTED!")
-
 def scanCVE(index, vuln):
-    pp.pprint(index)
+    print("Scanning for %s" % (vuln["id"]))
     affected_packages = []
     for package in vuln["vulnerable_product"]:
         p = package.split(":")
         pkg = re.compile(p[4] + "*")
-        for item in list(filter(pkg.match, index)):
-            print(item)
-
+        r = list(filter(pkg.match, index))
+        if len(r) > 0:
+            for item in r:
+                affected_packages.append(item)
+    if len(affected_packages) > 0:
+        result[vuln["id"]] = {"status": "OFUCKOSHIT", "packages": affected_packages}
+    else:
+        result[vuln["id"]] = {"status": "Passed"}
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scan system for CVE affected Packages")
@@ -67,11 +39,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     index = genPkgIndex()
+    results = {}
 
     if not args.id:
         print("Fetching latest vulnerabilities...")
-        vulns = requests.get("https://cve.circl.lu/api/last")
-    
+        vulns = json.loads(requests.get("https://cve.circl.lu/api/last").content.decode('utf-8'))
+        for vuln in vulns:
+            if args.show:
+                pp.ppprint(vuln)
+            else:
+                scanCVE(index, vuln)
     else:
         print("Fetching Vulneratility: %s" % args.id)
         vuln = json.loads(requests.get("https://cve.circl.lu/api/cve/%s"%(args.id)).content.decode('utf-8'))
@@ -79,3 +56,5 @@ if __name__ == "__main__":
             pp.pprint(vuln)
         else:
             scanCVE(index, vuln)
+
+    pp.pprint(result)
