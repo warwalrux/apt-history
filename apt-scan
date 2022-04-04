@@ -1,0 +1,21 @@
+#!/usr/bin/python3
+
+import argparse
+import requests
+import json
+import pprint
+import subprocess
+
+url = "https://cve.circl.lu/api/last"
+pp = pprint.PrettyPrinter()
+
+def scanPkgs(args):
+    recent_vulns = requests.get("https://cve.circl.lu/api/last")
+    pkgs = [ pkg.split('\t') for pkg in subprocess.check_output(["dpkg-query", "-W"]).decode('utf-8').strip().split('\n') ]
+    pp.pprint(json.loads(recent_vulns.content.decode('utf-8')))
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Scan system for CVE affected Packages")
+    parser.add_argument('-v', '--verbose', action="store_true", help="Verbose")
+    args = parser.parse_args()
+    scanPkgs(args)
