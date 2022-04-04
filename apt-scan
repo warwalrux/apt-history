@@ -28,7 +28,7 @@ def scanCVE(index, vuln):
                 if item not in affected_packages:
                     affected_packages.append(item)
     if len(affected_packages) > 0:
-        result[vuln["id"]] = {"status": "OFUCKOSHIT", "packages": affected_packages}
+        result[vuln["id"]] = {"status": "Failed", "packages": affected_packages}
     else:
         result[vuln["id"]] = {"status": "Passed"}
 
