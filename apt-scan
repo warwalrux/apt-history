@@ -6,18 +6,22 @@ import json
 import pprint
 import subprocess
 import re
+import logging
 
+logging.basicConfig(level=logging.INFO)
+
+CVEURL = "https://cve.mitre.org/cgi-bin/cvename.cgi?name=%s"
 url = "https://cve.circl.lu/api/last"
 pp = pprint.PrettyPrinter()
 result = {}
 
 def genPkgIndex():
     # Fetch all packages installed on this system
-    print("Building Package Index...")
+    logging.debug("Building Package Index...")
     return subprocess.check_output(["dpkg-query", "-W", "-f=${Package}:${Version}\n"]).decode('utf-8').strip().split('\n')
 
 def scanCVE(index, vuln):
-    print("Scanning for %s" % (vuln["id"]))
+    logging.debug("Scanning for %s" % (vuln["id"]))
     affected_packages = []
     for package in vuln["vulnerable_product"]:
         p = package.split(":")
@@ -28,9 +32,9 @@ def scanCVE(index, vuln):
                 if item not in affected_packages:
                     affected_packages.append(item)
     if len(affected_packages) > 0:
-        result[vuln["id"]] = {"status": "Failed", "packages": affected_packages}
+        result[vuln["id"]] = {"status": "Failed", "packages": affected_packages, "url": CVEURL % vuln["id"]}
     else:
-        result[vuln["id"]] = {"status": "Passed"}
+        result[vuln["id"]] = {"status": "Passed", "url": CVEURL % vuln["id"]}
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scan system for CVE affected Packages")
@@ -43,15 +47,15 @@ if __name__ == "__main__":
     results = {}
 
     if not args.id:
-        print("Fetching latest vulnerabilities...")
+        logging.debug("Fetching latest vulnerabilities...")
         vulns = json.loads(requests.get("https://cve.circl.lu/api/last").content.decode('utf-8'))
         for vuln in vulns:
             if args.show:
-                pp.ppprint(vuln)
+                pp.pprint(vuln)
             else:
                 scanCVE(index, vuln)
     else:
-        print("Fetching Vulneratility: %s" % args.id)
+        logging.debug("Fetching Vulneratility: %s" % args.id)
         vuln = json.loads(requests.get("https://cve.circl.lu/api/cve/%s"%(args.id)).content.decode('utf-8'))
         if args.show:
             pp.pprint(vuln)
