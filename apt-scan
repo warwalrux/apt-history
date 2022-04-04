@@ -26,6 +26,7 @@ def scanPkgs(args):
         vulns = requests.get("https://cve.circl.lu/api/cve/%s"%(args.id))
 
     CVE_LIST = json.loads(vulns.content.decode('utf-8'))
+    FOUND = []
 
     if isinstance(CVE_LIST, list):
         for CVE in CVE_LIST:
@@ -38,11 +39,12 @@ def scanPkgs(args):
         print("Checking %s..."%CVE_LIST["id"])
         for vuln in CVE_LIST["vulnerable_product"]:
             v = vuln.split(":")
-            r = re.compile(v[4] + "*")
-            apkgs = list(filter(r.match, pkgs))
-
-            r = re.compile(v[5] + "*")
-            result = list(filter(r.match, apkgs))
+            pkg = re.compile(v[4] + "*")
+            apkgs = list(filter(pkg.match, pkgs))
+            if len(apkgs):
+                print(apkgs)
+                ver = re.compile(v[5] + "*")
+                result = list(filter(ver.match, apkgs))
 
             print(result)
 #            if vstr in pkgs:
