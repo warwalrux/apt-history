@@ -9,20 +9,32 @@ import re
 import logging
 import jinja2
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.ERROR)
 
 CVEURL = "https://cve.mitre.org/cgi-bin/cvename.cgi?name=%s"
 url = "https://cve.circl.lu/api/last"
 pp = pprint.PrettyPrinter()
 result = {}
 
+
+output = jinja2.Template("""{%- for vuln in results -%}
+{{ results[vuln]["cve"]["id"] }} -- {{ results[vuln]["status"] }}
+{% if results[vuln]["status"] == "Failed" %}    Summary: {{ results[vuln]["cve"]["summary"] }}
+    URL: {{ results["url"] }}
+    Affected Packages:{% for pkg in results[vuln]["packages"] %}
+        - {{ pkg }}
+        {%- endfor -%}
+{% else %}
+{%- endif -%}
+{%- endfor -%}""")
+
 def genPkgIndex():
     # Fetch all packages installed on this system
-    logging.debug("Building Package Index...")
+    logging.info("Building Package Index...")
     return subprocess.check_output(["dpkg-query", "-W", "-f=${Package}:${Version}\n"]).decode('utf-8').strip().split('\n')
 
 def scanCVE(index, vuln, verbose):
-    logging.debug("Scanning for %s" % (vuln["id"]))
+    logging.info("Scanning for %s" % (vuln["id"]))
     affected_packages = []
     for package in vuln["vulnerable_product"]:
         p = package.split(":")
@@ -31,6 +43,7 @@ def scanCVE(index, vuln, verbose):
         if len(r) > 0:
             for item in r:
                 if item not in affected_packages:
+                    logging.debug("CVE detected!")
                     affected_packages.append(item)
     if len(affected_packages) > 0:
         result[vuln["id"]] = {"status": "Failed", "packages": affected_packages, "url": CVEURL % vuln["id"]}
@@ -47,29 +60,28 @@ def showCVE(vuln):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scan system for CVE affected Packages")
-    parser.add_argument('--details', action="store_true", help="Verbose output")
     parser.add_argument('--id', help="Evaluate for a specific CVE")
     parser.add_argument('--show', action='store_true', help="Show CVE Details")
     args = parser.parse_args()
     
     index = genPkgIndex()
-    results = {}
 
     if not args.id:
-        logging.debug("Fetching latest vulnerabilities...")
+        logging.info("Fetching latest vulnerabilities...")
         vulns = json.loads(requests.get("https://cve.circl.lu/api/last").content.decode('utf-8'))
         for vuln in vulns:
             if args.show:
                 showCVE(vuln)
             else:
-                scanCVE(index, vuln, args.verbose)
+                scanCVE(index, vuln, True)
     else:
-        logging.debug("Fetching Vulneratility: %s" % args.id)
+        logging.info("Fetching Vulneratility: %s" % args.id)
         vuln = json.loads(requests.get("https://cve.circl.lu/api/cve/%s"%(args.id)).content.decode('utf-8'))
         if args.show:
             showCVE(vuln)
         else:
-            scanCVE(index, vuln, args.details)
+            scanCVE(index, vuln, True)
 
     if not args.show:
-        pp.pprint(result)
+#        pp.pprint(result)
+        print(output.render(results=result))
