@@ -44,8 +44,8 @@ def scanPkgs(args):
             if len(apkgs) > 0:
                 ver = re.compile(v[5] + "*")
                 results = list(filter(ver.match, apkgs))
+                print(results)
                 if len(results) > 0:
-                    print(results)
                     FOUND.append({"CVE": CVE_LIST["id"], "FOUND": results })
         pp.pprint(FOUND)
 #            if vstr in pkgs:
