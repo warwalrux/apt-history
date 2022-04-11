@@ -7,80 +7,153 @@ import logging
 import re
 import requests
 import subprocess
+import sqlite3
+import tabulate
+import datetime
+import sys
 
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.DEBUG)
 
 # Templates
 CVEURL = "https://cve.mitre.org/cgi-bin/cvename.cgi?name=%s"
-OUTPUT = jinja2.Template("""{%- for vuln in results -%}
-{{ results[vuln]["cve"]["id"] }} -- {{ results[vuln]["status"] }}
-{% if results[vuln]["status"] == "Failed" %}    Summary: {{ results[vuln]["cve"]["summary"] }}
-    URL: {{ results["url"] }}
-    Affected Packages:{% for pkg in results[vuln]["packages"] %}
-        - {{ pkg }}{% endfor %}
-{% else %}
-{%- endif -%}
-{%- endfor -%}""")
-
 URL = { "LAST": "https://cve.circl.lu/api/last", "BY_ID": "https://cve.circl.lu/api/cve/%s" } 
-RESULT = {}
+TABLEFORMAT = "github"
+
+class CVEDB():
+    def __init__(self, no_update):
+        database = "cvemon.db"
+        self.connection = sqlite3.connect(database)
+        self.cursor = self.connection.cursor()
+        CVEDB_init = """CREATE TABLE IF NOT EXISTS main.cve (
+                        id INTEGER PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        cve BLOB NOT NULL,
+                        is_vuln BOOL NOT NULL,
+                        recv_date TEXT NOT NULL,
+                        last_seen TEXT NOT NULL);"""
+        self.run_cmd(CVEDB_init)
+        if not no_update:
+            self.__update()
+
+    def fetchVulns(self):
+        known_vulns = [ (json.loads(cve[0]), cve[1], cve[2]) for cve in self.run_cmd("SELECT cve, last_seen, is_vuln FROM main.cve;").fetchall() ]
+        return(known_vulns)
+
+    def __update(self):
+        known_vulns = [ cve[0]["id"] for cve in self.fetchVulns() ]
+
+        logging.info("Updating CVE Catalog...")
+        vulns = requests.get(URL["LAST"]).json()
+    
+        now = datetime.datetime.now().isoformat()
+
+        for vuln in vulns:
+            if vuln["id"] not in known_vulns:
+                logging.debug("Adding %s to the catalog" % vuln["id"])
+                cmd = "INSERT INTO main.cve (id, name, cve, is_vuln, recv_date, last_seen) VALUES (NULL, ?, ?, ?, ?, ?)"
+                self.cursor.execute(cmd, [vuln["id"], json.dumps(vuln), True, now, now])
+            else:
+                logging.debug("Found %s in the catalog" % vuln["id"])
+
+        self.connection.commit()
+    
+    def run_cmd(self, cmd, data=None):
+        if data:
+            output = self.cursor.execute(cmd, data)
+        else:
+            output = self.cursor.execute(cmd)
+
+        self.connection.commit()
+        return(output)
+    
+    def updateCVERow(self, row):
+        # Update the row record
+        cmd = "UPDATE main.cve SET last_scan = %s WHERE name = %s" % (row[-1], row[0])
+        if bool(row[2]):
+            self.run_cmd('''UPDATE main.cve SET is_vuln = :VULN WHERE name = :NAME''', { "NAME": row[0], "VULN": row[2] })
+        else:
+            self.run_cmd('''UPDATE main.cve SET last_seen = :LAST, is_vuln = :VULN WHERE name = :NAME''', { "LAST": row[-1], "NAME": row[0], "VULN": row[2] })
+
+def print_table(table, fmt=TABLEFORMAT):
+    # Use tabulate to fancy format output
+    headers = table[0]
+    table.pop(0)
+    print(tabulate.tabulate(table, headers, tablefmt="github"))
+    sys.exit(0)
 
 def genPkgIndex():
     # Fetch all packages installed on this system
     logging.info("Building Package Index...")
     return subprocess.check_output(["dpkg-query", "-W", "-f=${Package}:${Version}\n"]).decode('utf-8').strip().split('\n')
 
-def scanCVE(index, vuln):
+def scanCVE(db, index, vuln):
     # Scan the index for package + versions mentioned in the CVE provided
     logging.info("Scanning for %s" % (vuln["id"]))
     affected_packages = []
     for package in vuln["vulnerable_product"]:
         p = package.split(":")
         pkg = re.compile(p[4] + "*")
+        ver = p[5]
         r = list(filter(pkg.match, index))
         if len(r) > 0:
             for item in r:
-                if item not in affected_packages:
-                    logging.debug("CVE detected!")
+                if ver.find(item) != -1 and item not in affected_packages:
                     affected_packages.append(item)
-
-    # Append results, if any, to RESULT
+    
+    now = datetime.datetime.now().isoformat()
     if len(affected_packages) > 0:
-        RESULT[vuln["id"]] = {"status": "Failed", "packages": affected_packages, "url": CVEURL % vuln["id"], "cve": vuln}
+        logging.info("%s detected"%vuln["id"])
+        db.updateCVERow([vuln["id"], json.dumps(vuln), True, now])
     else:
-        RESULT[vuln["id"]] = {"status": "Passed", "url": CVEURL % vuln["id"], "cve": vuln}
+        db.updateCVERow([vuln["id"], json.dumps(vuln), False, now])
 
 def showCVE(vuln):
     # Dump Vulnerability data
     # TODO: Maybe provide a way to generate jinja2 reports on CVEs from file.
-    j = jinja2.Template("""{{ vuln["id"] }}: {{ vuln["summary"] }}
+    j = jinja2.Template("""### {{ vuln["id"] }}:
+Published: {{ vuln["Published"] }}
+Impacts: {% for key in vuln["impact"] %}
+    {{ key }}: {{ vuln["impact"][key] }}{% endfor %}
+CVSS: {{ vuln["cvss"] }}
+Summary: {{ vuln["summary"] }}
     """)
 
     print(j.render(vuln=vuln))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scan system for CVE affected Packages")
-    parser.add_argument('--id', help="Evaluate for a specific CVE")
-    parser.add_argument('--show', action='store_true', help="Show CVE Details")
+    parser.add_argument('--no-update', action="store_true", default=False, help="Skip CVE Catalog Update")
+
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument('--show-cve', help="Show CVE Details")
+    actions.add_argument('--show-vulns', action='store_true', help="Show Vulnerability Report")
+    actions.add_argument('--show-all', action='store_true', help="Show all CVEs")
+    actions.add_argument('--scan', action='store_true', help="Run CVE Scan")
     args = parser.parse_args()
     
-    index = genPkgIndex()
+    db = CVEDB(args.no_update)
 
-    if not args.id:
-        logging.info("Fetching latest vulnerabilities...")
-        vulns = json.loads(requests.get(URL["LAST"]).content.decode('utf-8'))
-        for vuln in vulns:
-            if args.show:
-                showCVE(vuln)
-            else:
-                scanCVE(index, vuln)
-    else:
-        logging.info("Fetching Vulneratility: %s" % args.id)
-        vuln = json.loads(requests.get(URL["BY_ID"]%(args.id)).content.decode('utf-8'))
-        if args.show:
-            showCVE(vuln)
+    if args.scan:
+        index = genPkgIndex()
+        vulns = [ v for v in db.fetchVulns() if bool(v[2]) ]
+        if len(vulns) > 0:
+            for vuln in vulns:
+                if bool(vuln[2]):
+                    scanCVE(db, index, vuln[0])
         else:
-            scanCVE(index, vuln)
+            logging.info("No Active CVEs detected")
 
-    if not args.show:
-        print(OUTPUT.render(results=RESULT))
+    if args.show_vulns or args.show_all:
+        vulns = [ v for v in db.fetchVulns() ]
+        if args.show_vulns:
+            vulns = [ v for v in db.fetchVulns() if bool(v[2]) ]
+
+        table = [["CVE", "Severity", "Last Seen", "Vulnerable", "URL"]]
+
+        for vuln in vulns:
+            table.append([vuln[0]["id"], vuln[0]["cvss"], vuln[1], bool(vuln[2]), CVEURL%vuln[0]["id"]])
+        print_table(table) 
+
+    if args.show_cve:
+        showCVE([ v[0] for v in db.fetchVulns() if v[0]["id"] == args.show_cve ][0])
+        
